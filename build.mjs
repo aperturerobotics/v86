@@ -26,7 +26,7 @@ const shared = {
 // ESM library output
 await build({
     ...shared,
-    entryPoints: ['src/main.js'],
+    entryPoints: ['src/main.ts'],
     outfile: 'dist/v86.js',
     format: 'esm',
     platform: 'neutral',
@@ -35,7 +35,7 @@ await build({
 // Browser bundle (single file, all-inclusive)
 await build({
     ...shared,
-    entryPoints: ['src/main.js'],
+    entryPoints: ['src/main.ts'],
     outfile: 'dist/v86.browser.js',
     format: 'iife',
     globalName: 'V86Starter',

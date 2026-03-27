@@ -11,12 +11,8 @@ interface ACPICpu {
     io: IO
     devices: {
         pci: {
-            register_device(device: {
-                pci_id: number
-                pci_space: number[]
-                pci_bars: number[]
-                name: string
-            }): void
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            register_device(device: any): void
         }
     }
     device_raise_irq(irq: number): void
@@ -40,9 +36,9 @@ export class ACPI {
         this.name = 'acpi'
         this.cpu = cpu
 
-        var io = cpu.io
+        const io = cpu.io
 
-        var acpi = {
+        const acpi = {
             pci_id: 0x07 << 3,
             pci_space: [
                 0x86, 0x80, 0x13, 0x71, 0x07, 0x00, 0x80, 0x02, 0x08, 0x00,
@@ -138,7 +134,7 @@ export class ACPI {
             undefined,
             undefined,
             function (this: ACPI): number {
-                var value = this.get_timer(v86.microtick()) & 0xffffff
+                const value = this.get_timer(v86.microtick()) & 0xffffff
                 //dbg_log("pmtimer read: " + h(value >>> 0), LOG_ACPI);
                 return value
             },
@@ -197,8 +193,9 @@ export class ACPI {
     }
 
     timer(now: number): number {
-        var timer = this.get_timer(now)
-        var highest_bit_changed = ((timer ^ this.last_timer) & (1 << 23)) !== 0
+        const timer = this.get_timer(now)
+        const highest_bit_changed =
+            ((timer ^ this.last_timer) & (1 << 23)) !== 0
 
         if (this.pm1_enable & 1 && highest_bit_changed) {
             dbg_log('ACPI raise irq', LOG_ACPI)
@@ -253,7 +250,7 @@ export class ACPI {
     }
 
     get_state(): [number, number, number, Uint8Array] {
-        var state: [number, number, number, Uint8Array] = [
+        const state: [number, number, number, Uint8Array] = [
             this.status,
             this.pm1_status,
             this.pm1_enable,
