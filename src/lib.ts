@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { dbg_assert } from './log.js'
 
@@ -7,7 +7,7 @@ export function pads(
     str: string | number | undefined | null,
     len: number,
 ): string {
-    var s = str || str === 0 ? str + '' : ''
+    const s = str || str === 0 ? str + '' : ''
     return s.padEnd(len, ' ')
 }
 
@@ -16,12 +16,11 @@ export function pad0(
     str: string | number | undefined | null,
     len: number,
 ): string {
-    var s = str || str === 0 ? str + '' : ''
+    const s = str || str === 0 ? str + '' : ''
     return s.padStart(len, '0')
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export var view = function (
+export const view = function (
     constructor: any,
     memory: { buffer: ArrayBuffer },
     offset: number,
@@ -56,7 +55,7 @@ export var view = function (
 }
 
 export function h(n: number, len?: number): string {
-    var str: string
+    let str: string
     if (!n) {
         str = ''
     } else {
@@ -118,7 +117,7 @@ export function hex_dump(buffer: Uint8Array | number[]): string {
 }
 
 /* global require */
-export var get_rand_int: () => number
+export let get_rand_int: () => number
 if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     const rand_data = new Int32Array(1)
 
@@ -127,6 +126,7 @@ if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
         return rand_data[0]
     }
 } else if (typeof require !== 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const nodeCrypto = require('crypto')
 
     get_rand_int = function () {
@@ -142,7 +142,7 @@ if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     dbg_assert(false, 'Unsupported platform: No cryptographic random values')
 }
 
-export var int_log2: (x: number) => number
+export let int_log2: (x: number) => number
 
 if (
     typeof Math.clz32 === 'function' &&
@@ -156,9 +156,9 @@ if (
         return 31 - Math.clz32(x)
     }
 } else {
-    var int_log2_table = new Int8Array(256)
+    const int_log2_table = new Int8Array(256)
 
-    for (var i = 0, b = -2; i < 256; i++) {
+    for (let i = 0, b = -2; i < 256; i++) {
         if (!(i & (i - 1))) b++
 
         int_log2_table[i] = b
@@ -169,17 +169,17 @@ if (
         dbg_assert(x > 0)
 
         // http://jsperf.com/integer-log2/6
-        var tt = x >>> 16
+        const tt = x >>> 16
 
         if (tt) {
-            var t = tt >>> 8
+            const t = tt >>> 8
             if (t) {
                 return 24 + int_log2_table[t]
             } else {
                 return 16 + int_log2_table[tt]
             }
         } else {
-            var t = x >>> 8
+            const t = x >>> 8
             if (t) {
                 return 8 + int_log2_table[t]
             } else {
@@ -238,7 +238,7 @@ export class ByteQueue {
         if (!this.length) {
             return -1
         } else {
-            var item = this.data[this.start]
+            const item = this.data[this.start]
 
             this.start = (this.start + 1) & (this.size - 1)
             this.length--
@@ -292,7 +292,7 @@ export class FloatQueue {
         if (!this.length) {
             return undefined
         } else {
-            var item = this.data[this.start]
+            const item = this.data[this.start]
 
             this.start = (this.start + 1) & (this.size - 1)
             this.length--
@@ -302,14 +302,14 @@ export class FloatQueue {
     }
 
     shift_block(count: number): Float32Array {
-        var slice = new Float32Array(count)
+        const slice = new Float32Array(count)
 
         if (count > this.length) {
             count = this.length
         }
-        var slice_end = this.start + count
+        let slice_end = this.start + count
 
-        var partial = this.data.subarray(this.start, slice_end)
+        const partial = this.data.subarray(this.start, slice_end)
 
         slice.set(partial)
         if (slice_end >= this.size) {
@@ -343,12 +343,12 @@ export function dump_file(ab: BlobPart | BlobPart[], name: string): void {
         ab = [ab]
     }
 
-    var blob = new Blob(ab)
+    const blob = new Blob(ab)
     download(blob, name)
 }
 
 export function download(file_or_blob: Blob | File, name: string): void {
-    var a = document.createElement('a')
+    const a = document.createElement('a')
     a['download'] = name
     a.href = window.URL.createObjectURL(file_or_blob)
     a.dataset['downloadurl'] = [
@@ -358,7 +358,7 @@ export function download(file_or_blob: Blob | File, name: string): void {
     ].join(':')
 
     if (document.createEvent) {
-        var ev = document.createEvent('MouseEvent')
+        const ev = document.createEvent('MouseEvent')
         ev.initMouseEvent(
             'click',
             true,
@@ -421,7 +421,6 @@ export class Bitmap {
 }
 
 export interface LoadFileOptions {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     done?: (result: any, http?: XMLHttpRequest) => void
     progress?: (e: ProgressEvent) => void
     as_json?: boolean
@@ -430,12 +429,12 @@ export interface LoadFileOptions {
     range?: { start: number; length: number }
 }
 
-export var load_file: (
+export let load_file: (
     filename: string,
     options: LoadFileOptions,
     n_tries?: number,
 ) => Promise<void>
-export var get_file_size: (path: string) => Promise<number>
+export let get_file_size: (path: string) => Promise<number>
 
 if (
     typeof XMLHttpRequest === 'undefined' ||
@@ -443,7 +442,6 @@ if (
         process.versions &&
         process.versions.node)
 ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let fs: any
 
     load_file = async function (
@@ -474,7 +472,9 @@ if (
                 await fd['close']()
             }
 
-            options.done && options.done(new Uint8Array(buffer))
+            if (options.done) {
+                options.done(new Uint8Array(buffer))
+            }
         } else {
             const o = {
                 encoding: options.as_json ? 'utf-8' : null,
@@ -503,7 +503,7 @@ if (
         options: LoadFileOptions,
         n_tries?: number,
     ) {
-        var http = new XMLHttpRequest()
+        const http = new XMLHttpRequest()
 
         http.open(options.method || 'get', filename, true)
 
@@ -514,10 +514,10 @@ if (
         }
 
         if (options.headers) {
-            var header_names = Object.keys(options.headers)
+            const header_names = Object.keys(options.headers)
 
-            for (var i = 0; i < header_names.length; i++) {
-                var name = header_names[i]
+            for (let i = 0; i < header_names.length; i++) {
+                const name = header_names[i]
                 http.setRequestHeader(name, options.headers[name])
             }
         }
@@ -561,7 +561,9 @@ if (
                             )
                         }
                     }
-                    options.done && options.done(http.response, http)
+                    if (options.done) {
+                        options.done(http.response, http)
+                    }
                 }
             }
         }
@@ -592,8 +594,9 @@ if (
         return new Promise((resolve, reject) => {
             load_file(url, {
                 done: (_buffer, http) => {
-                    var header = http!.getResponseHeader('Content-Range') || ''
-                    var match = header.match(/\/(\d+)\s*$/)
+                    const header =
+                        http!.getResponseHeader('Content-Range') || ''
+                    const match = header.match(/\/(\d+)\s*$/)
 
                     if (match) {
                         resolve(+match[1])

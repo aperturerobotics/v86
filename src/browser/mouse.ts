@@ -29,10 +29,10 @@ export class MouseAdapter {
 
         this.touch_start_handler = (e: TouchEvent) => {
             if (this.may_handle(e)) {
-                var touches = e.changedTouches
+                const touches = e.changedTouches
 
                 if (touches && touches.length) {
-                    var touch = touches[touches.length - 1]
+                    const touch = touches[touches.length - 1]
                     this.last_x = touch.clientX
                     this.last_y = touch.clientY
                 }
@@ -59,13 +59,13 @@ export class MouseAdapter {
                 return
             }
 
-            var delta_x = 0
-            var delta_y = 0
+            let delta_x = 0
+            let delta_y = 0
 
             if ('changedTouches' in e) {
-                var touches = e.changedTouches
+                const touches = e.changedTouches
                 if (touches.length) {
-                    var touch = touches[touches.length - 1]
+                    const touch = touches[touches.length - 1]
                     delta_x = touch.clientX - this.last_x
                     delta_y = touch.clientY - this.last_y
 
@@ -95,7 +95,7 @@ export class MouseAdapter {
             this.bus.send('mouse-delta', [delta_x, delta_y])
 
             if (this.screen_container) {
-                var me = e instanceof MouseEvent ? e : e.changedTouches[0]
+                const me = e instanceof MouseEvent ? e : e.changedTouches[0]
                 const absolute_x = me.pageX - this.screen_container.offsetLeft
                 const absolute_y = me.pageY - this.screen_container.offsetTop
                 this.bus.send('mouse-absolute', [
@@ -124,8 +124,8 @@ export class MouseAdapter {
                 return
             }
 
-            var delta_x = -e.deltaY
-            var delta_y = 0
+            let delta_x = -e.deltaY
+            const delta_y = 0
 
             if (delta_x < 0) {
                 delta_x = -1
@@ -198,7 +198,7 @@ export class MouseAdapter {
     }
 
     private is_child(child: Node, parent: Node): boolean {
-        var node: Node | null = child
+        let node: Node | null = child
         while (node && node.parentNode) {
             if (node === parent) {
                 return true
@@ -217,8 +217,8 @@ export class MouseAdapter {
         const MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY = true
 
         if (MOVE_MOUSE_WHEN_OVER_SCREEN_ONLY) {
-            var parent = this.screen_container || document.body
-            var target = e.target
+            const parent = this.screen_container || document.body
+            const target = e.target
             if (!target) {
                 return false
             }

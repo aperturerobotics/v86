@@ -84,19 +84,19 @@ const // Used for drivers to identify device (DSP command 0xE3).
     // Indices to the irq_triggered register.
     SB_IRQ_8BIT = 0x1,
     SB_IRQ_16BIT = 0x2,
-    SB_IRQ_MIDI = 0x1,
-    SB_IRQ_MPU = 0x4
+    _SB_IRQ_MIDI = 0x1,
+    _SB_IRQ_MPU = 0x4
 
 // Probably less efficient, but it's more maintainable, instead
 // of having a single large unorganised and decoupled table.
-var DSP_COMMAND_SIZES = new Uint8Array(256)
-var DSP_COMMAND_HANDLERS: Array<((this: SB16) => void) | undefined> = []
-var MIXER_READ_HANDLERS: Array<((this: SB16) => number) | undefined> = []
-var MIXER_WRITE_HANDLERS: Array<
+const DSP_COMMAND_SIZES = new Uint8Array(256)
+const DSP_COMMAND_HANDLERS: Array<((this: SB16) => void) | undefined> = []
+const MIXER_READ_HANDLERS: Array<((this: SB16) => number) | undefined> = []
+const MIXER_WRITE_HANDLERS: Array<
     ((this: SB16, data: number) => void) | undefined
 > = []
-var MIXER_REGISTER_IS_LEGACY = new Uint8Array(256)
-var FM_HANDLERS: Array<
+const MIXER_REGISTER_IS_LEGACY = new Uint8Array(256)
+const FM_HANDLERS: Array<
     | ((this: SB16, data: number, register: number, address: number) => void)
     | undefined
 > = []
@@ -423,7 +423,7 @@ export class SB16 {
     }
 
     get_state(): unknown[] {
-        var state: unknown[] = []
+        const state: unknown[] = []
 
         // state[0] = this.write_buffer;
         // state[1] = this.read_buffer;
@@ -476,7 +476,6 @@ export class SB16 {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         // this.write_buffer = state[0];
         // this.read_buffer = state[1];
@@ -527,7 +526,7 @@ export class SB16 {
         this.irq_triggered = state[35]
         //state[36];
 
-        var buf = this.dma_buffer_uint8.buffer
+        const buf = this.dma_buffer_uint8.buffer
         if (buf instanceof ArrayBuffer) {
             this.dma_buffer = buf
         }
@@ -648,7 +647,7 @@ export class SB16 {
         if (this.irq_triggered[SB_IRQ_8BIT]) {
             this.lower_irq(SB_IRQ_8BIT)
         }
-        var ready = this.read_buffer.length && !this.dsp_highspeed
+        const ready = this.read_buffer.length && !this.dsp_highspeed
         return ((ready ? 1 : 0) << 7) | 0x7f
     }
 
@@ -674,7 +673,7 @@ export class SB16 {
             '221 write: (unimplemented) fm register 0 data = ' + h(value),
             LOG_SB16,
         )
-        var handler = FM_HANDLERS[this.fm_current_address0]
+        let handler = FM_HANDLERS[this.fm_current_address0]
         if (!handler) {
             handler = this.fm_default_write
         }
@@ -696,7 +695,7 @@ export class SB16 {
             '223 write: (unimplemented) fm register 1 data =' + h(value),
             LOG_SB16,
         )
-        var handler = FM_HANDLERS[this.fm_current_address1]
+        let handler = FM_HANDLERS[this.fm_current_address1]
         if (!handler) {
             handler = this.fm_default_write
         }
@@ -807,7 +806,7 @@ export class SB16 {
     port3x1_read(): number {
         dbg_log('331 read: mpu status', LOG_SB16)
 
-        var status = 0
+        let status = 0
         status |= 0x40 * 0 // Output Ready
         status |= 0x80 * +!this.mpu_read_buffer.length // Input Ready
 
@@ -829,7 +828,7 @@ export class SB16 {
     //
 
     command_do(): void {
-        var handler = DSP_COMMAND_HANDLERS[this.command]
+        let handler = DSP_COMMAND_HANDLERS[this.command]
         if (!handler) {
             handler = this.dsp_default_handler
         }
@@ -850,8 +849,8 @@ export class SB16 {
     //
 
     mixer_read(address: number): number {
-        var handler = MIXER_READ_HANDLERS[address]
-        var data: number
+        const handler = MIXER_READ_HANDLERS[address]
+        let data: number
         if (handler) {
             data = handler.call(this)
         } else {
@@ -868,7 +867,7 @@ export class SB16 {
     }
 
     mixer_write(address: number, data: number): void {
-        var handler = MIXER_WRITE_HANDLERS[address]
+        const handler = MIXER_WRITE_HANDLERS[address]
         if (handler) {
             handler.call(this, data)
         } else {
@@ -940,7 +939,7 @@ export class SB16 {
 
     mixer_full_update(): void {
         // Start at 1. Don't re-reset.
-        for (var i = 1; i < this.mixer_registers.length; i++) {
+        for (let i = 1; i < this.mixer_registers.length; i++) {
             if (MIXER_REGISTER_IS_LEGACY[i]) {
                 // Legacy registers are actually mapped to other register locations. Update
                 // using the new registers rather than the legacy registers.
@@ -1013,7 +1012,7 @@ export class SB16 {
         this.dma_bytes_block = SB_DMA_BLOCK_SAMPLES * this.bytes_per_sample
 
         // Ensure block size is small enough but not too small, and is divisible by 4
-        var max_bytes_block = Math.max((this.dma_bytes_count >> 2) & ~0x3, 32)
+        const max_bytes_block = Math.max((this.dma_bytes_count >> 2) & ~0x3, 32)
         this.dma_bytes_block = Math.min(max_bytes_block, this.dma_bytes_block)
 
         // (2) Wait until channel is unmasked (if not already)
@@ -1039,8 +1038,8 @@ export class SB16 {
     dma_transfer_next(): void {
         dbg_log('dma transfering next block', LOG_SB16)
 
-        var size = Math.min(this.dma_bytes_left, this.dma_bytes_block)
-        var samples = Math.floor(size / this.bytes_per_sample)
+        const size = Math.min(this.dma_bytes_left, this.dma_bytes_block)
+        const samples = Math.floor(size / this.bytes_per_sample)
 
         this.dma.do_write(
             this.dma_syncbuffer,
@@ -1072,11 +1071,11 @@ export class SB16 {
     }
 
     dma_to_dac(sample_count: number): void {
-        var amplitude = this.dsp_16bit ? 32767.5 : 127.5
-        var offset = this.dsp_signed ? 0 : -1
-        var repeats = this.dsp_stereo ? 1 : 2
+        const amplitude = this.dsp_16bit ? 32767.5 : 127.5
+        const offset = this.dsp_signed ? 0 : -1
+        const repeats = this.dsp_stereo ? 1 : 2
 
-        var buffer: Int8Array | Uint8Array | Int16Array | Uint16Array
+        let buffer: Int8Array | Uint8Array | Int16Array | Uint16Array
         if (this.dsp_16bit) {
             buffer = this.dsp_signed
                 ? this.dma_buffer_int16
@@ -1087,10 +1086,10 @@ export class SB16 {
                 : this.dma_buffer_uint8
         }
 
-        var channel = 0
-        for (var i = 0; i < sample_count; i++) {
-            var sample = audio_normalize(buffer[i], amplitude, offset)
-            for (var j = 0; j < repeats; j++) {
+        let channel = 0
+        for (let i = 0; i < sample_count; i++) {
+            const sample = audio_normalize(buffer[i], amplitude, offset)
+            for (let j = 0; j < repeats; j++) {
                 this.dac_buffers[channel].push(sample)
                 channel ^= 1
             }
@@ -1113,8 +1112,8 @@ export class SB16 {
             return
         }
 
-        var out0 = this.dac_buffers[0].shift_block(this.dac_buffers[0].length)
-        var out1 = this.dac_buffers[1].shift_block(this.dac_buffers[1].length)
+        const out0 = this.dac_buffers[0].shift_block(this.dac_buffers[0].length)
+        const out1 = this.dac_buffers[1].shift_block(this.dac_buffers[1].length)
         this.bus.send('dac-send-data', [out0, out1], [out0.buffer, out1.buffer])
     }
 
@@ -1145,15 +1144,15 @@ function register_dsp_command(
     if (!handler) {
         handler = SB16.prototype.dsp_default_handler
     }
-    for (var i = 0; i < commands.length; i++) {
+    for (let i = 0; i < commands.length; i++) {
         DSP_COMMAND_SIZES[commands[i]] = size
         DSP_COMMAND_HANDLERS[commands[i]] = handler
     }
 }
 
 function any_first_digit(base: number): number[] {
-    var commands: number[] = []
-    for (var i = 0; i < 16; i++) {
+    const commands: number[] = []
+    for (let i = 0; i < 16; i++) {
         commands.push(base + i)
     }
     return commands
@@ -1172,7 +1171,7 @@ register_dsp_command([0x0f], 1, function () {
 
 // 8-bit direct mode single byte digitized sound output.
 register_dsp_command([0x10], 1, function () {
-    var value = audio_normalize(this.write_buffer.shift(), 127.5, -1)
+    const value = audio_normalize(this.write_buffer.shift(), 127.5, -1)
 
     this.dac_buffers[0].push(value)
     this.dac_buffers[1].push(value)
@@ -1330,7 +1329,7 @@ register_dsp_command(any_first_digit(0xb0), 3, function () {
         this.dsp_default_handler()
         return
     }
-    var mode = this.write_buffer.shift()
+    const mode = this.write_buffer.shift()
     this.dma_irq = SB_IRQ_16BIT
     this.dma_channel = this.dma_channel_16bit
     this.dma_autoinit = !!(this.command & (1 << 2))
@@ -1348,7 +1347,7 @@ register_dsp_command(any_first_digit(0xc0), 3, function () {
         this.dsp_default_handler()
         return
     }
-    var mode = this.write_buffer.shift()
+    const mode = this.write_buffer.shift()
     this.dma_irq = SB_IRQ_8BIT
     this.dma_channel = this.dma_channel_8bit
     this.dma_autoinit = !!(this.command & (1 << 2))
@@ -1426,7 +1425,7 @@ register_dsp_command([0xe2], 1)
 // Get DSP copyright.
 register_dsp_command([0xe3], 0, function () {
     this.read_buffer.clear()
-    for (var i = 0; i < DSP_COPYRIGHT.length; i++) {
+    for (let i = 0; i < DSP_COPYRIGHT.length; i++) {
         this.read_buffer.push(DSP_COPYRIGHT.charCodeAt(i))
     }
     // Null terminator.
@@ -1450,12 +1449,12 @@ register_dsp_command([0xf2, 0xf3], 0, function () {
 })
 
 // ASP - unknown function
-var SB_F9 = new Uint8Array(256)
+const SB_F9 = new Uint8Array(256)
 SB_F9[0x0e] = 0xff
 SB_F9[0x0f] = 0x07
 SB_F9[0x37] = 0x38
 register_dsp_command([0xf9], 1, function () {
-    var input = this.write_buffer.shift()
+    const input = this.write_buffer.shift()
     dbg_log('dsp 0xf9: unknown function. input: ' + input, LOG_SB16)
 
     this.read_buffer.clear()
@@ -1495,8 +1494,8 @@ function register_mixer_legacy(
     MIXER_REGISTER_IS_LEGACY[address_old] = 1
 
     MIXER_READ_HANDLERS[address_old] = function (this: SB16): number {
-        var left = this.mixer_registers[address_new_left] & 0xf0
-        var right = this.mixer_registers[address_new_right] >>> 4
+        const left = this.mixer_registers[address_new_left] & 0xf0
+        const right = this.mixer_registers[address_new_right] >>> 4
         return left | right
     }
 
@@ -1505,10 +1504,10 @@ function register_mixer_legacy(
         data: number,
     ): void {
         this.mixer_registers[address_old] = data
-        var prev_left = this.mixer_registers[address_new_left]
-        var prev_right = this.mixer_registers[address_new_right]
-        var left = (data & 0xf0) | (prev_left & 0x0f)
-        var right = ((data << 4) & 0xf0) | (prev_right & 0x0f)
+        const prev_left = this.mixer_registers[address_new_left]
+        const prev_right = this.mixer_registers[address_new_right]
+        const left = (data & 0xf0) | (prev_left & 0x0f)
+        const right = ((data << 4) & 0xf0) | (prev_right & 0x0f)
 
         this.mixer_write(address_new_left, left)
         this.mixer_write(address_new_right, right)
@@ -1706,7 +1705,7 @@ register_mixer_write(0x80, function (bits) {
 
 // DMA Select.
 register_mixer_read(0x81, function () {
-    var ret = 0
+    let ret = 0
     switch (this.dma_channel_8bit) {
         case SB_DMA0:
             ret |= 0x1
@@ -1744,8 +1743,8 @@ register_mixer_write(0x81, function (bits) {
 
 // IRQ Status.
 register_mixer_read(0x82, function () {
-    var ret = 0x20
-    for (var i = 0; i < 16; i++) {
+    let ret = 0x20
+    for (let i = 0; i < 16; i++) {
         ret |= i * this.irq_triggered[i]
     }
     return ret
@@ -1767,14 +1766,14 @@ function register_fm_write(
     if (!handler) {
         handler = SB16.prototype.fm_default_write
     }
-    for (var i = 0; i < addresses.length; i++) {
+    for (let i = 0; i < addresses.length; i++) {
         FM_HANDLERS[addresses[i]] = handler
     }
 }
 
 function between(start: number, end: number): number[] {
-    var a: number[] = []
-    for (var i = start; i <= end; i++) {
+    const a: number[] = []
+    for (let i = start; i <= end; i++) {
         a.push(i)
     }
     return a
@@ -1848,7 +1847,7 @@ register_fm_write([0x08], function (_bits, _register, _address) {
 })
 
 register_fm_write(between(0x20, 0x35), function (_bits, register, address) {
-    var _operator = get_fm_operator(register, address - 0x20)
+    const _operator = get_fm_operator(register, address - 0x20)
     // Tremolo
     // Vibrato
     // Sustain
@@ -1857,25 +1856,25 @@ register_fm_write(between(0x20, 0x35), function (_bits, register, address) {
 })
 
 register_fm_write(between(0x40, 0x55), function (_bits, register, address) {
-    var _operator = get_fm_operator(register, address - 0x40)
+    const _operator = get_fm_operator(register, address - 0x40)
     // Key Scale Level
     // Output Level
 })
 
 register_fm_write(between(0x60, 0x75), function (_bits, register, address) {
-    var _operator = get_fm_operator(register, address - 0x60)
+    const _operator = get_fm_operator(register, address - 0x60)
     // Attack Rate
     // Decay Rate
 })
 
 register_fm_write(between(0x80, 0x95), function (_bits, register, address) {
-    var _operator = get_fm_operator(register, address - 0x80)
+    const _operator = get_fm_operator(register, address - 0x80)
     // Sustain Level
     // Release Rate
 })
 
 register_fm_write(between(0xa0, 0xa8), function (_bits, _register, address) {
-    var _channel = address - 0xa0
+    const _channel = address - 0xa0
     // Frequency Number (Lower 8 bits)
 })
 
@@ -1904,7 +1903,7 @@ register_fm_write(between(0xc0, 0xc8), function (_bits, _register, _address) {
 })
 
 register_fm_write(between(0xe0, 0xf5), function (_bits, register, address) {
-    var _operator = get_fm_operator(register, address - 0xe0)
+    const _operator = get_fm_operator(register, address - 0xe0)
     // Waveform Select
 })
 

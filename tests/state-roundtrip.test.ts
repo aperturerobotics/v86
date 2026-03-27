@@ -5,7 +5,7 @@ import { save_state, restore_state, StateLoadError } from '../src/state.js'
 // Must be a class instance (not plain object) to pass save_object's constructor check.
 class MockCpu {
     wasm_memory = new WebAssembly.Memory({ initial: 1 })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     private stored_state: any[]
 
     constructor(memory_size: number) {
@@ -28,7 +28,7 @@ class MockCpu {
     get_state() {
         return this.stored_state
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     set_state(state: any[]) {
         this.stored_state = state
     }

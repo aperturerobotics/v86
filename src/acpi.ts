@@ -11,7 +11,6 @@ interface ACPICpu {
     io: IO
     devices: {
         pci: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             register_device(device: any): void
         }
     }

@@ -50,7 +50,7 @@ export class DMA {
 
         this.lsb_msb_flipflop = 0
 
-        var io = cpu.io
+        const io = cpu.io
 
         io.register_write(0x00, this, this.port_addr_write.bind(this, 0))
         io.register_write(0x02, this, this.port_addr_write.bind(this, 1))
@@ -254,8 +254,8 @@ export class DMA {
     }
 
     port_singlemask_write(channel_offset: number, data_byte: number): void {
-        var channel = (data_byte & 0x3) + channel_offset
-        var value = data_byte & 0x4 ? 1 : 0
+        const channel = (data_byte & 0x3) + channel_offset
+        const value = data_byte & 0x4 ? 1 : 0
         dbg_log(
             'singlechannel mask write [' + channel + '] = ' + value,
             LOG_DMA,
@@ -265,13 +265,13 @@ export class DMA {
 
     port_multimask_write(channel_offset: number, data_byte: number): void {
         dbg_log('multichannel mask write: ' + h(data_byte), LOG_DMA)
-        for (var i = 0; i < 4; i++) {
+        for (let i = 0; i < 4; i++) {
             this.update_mask(channel_offset + i, data_byte & (1 << i))
         }
     }
 
     port_multimask_read(channel_offset: number): number {
-        var value = 0
+        let value = 0
         value |= this.channel_mask[channel_offset + 0]
         value |= this.channel_mask[channel_offset + 1] << 1
         value |= this.channel_mask[channel_offset + 2] << 2
@@ -281,7 +281,7 @@ export class DMA {
     }
 
     port_mode_write(channel_offset: number, data_byte: number): void {
-        var channel = (data_byte & 0x3) + channel_offset
+        const channel = (data_byte & 0x3) + channel_offset
         dbg_log('mode write [' + channel + '] = ' + h(data_byte), LOG_DMA)
         this.channel_mode[channel] = data_byte
     }
@@ -304,7 +304,7 @@ export class DMA {
 
             if (!value) {
                 dbg_log('firing on_unmask(' + channel + ')', LOG_DMA)
-                for (var i = 0; i < this.unmask_listeners.length; i++) {
+                for (let i = 0; i < this.unmask_listeners.length; i++) {
                     this.unmask_listeners[i].fn.call(
                         this.unmask_listeners[i].this_value,
                         channel,
@@ -322,7 +322,7 @@ export class DMA {
         channel: number,
         fn: (error: boolean) => void,
     ): void {
-        var read_count = this.count_get_8bit(channel),
+        const read_count = this.count_get_8bit(channel),
             addr = this.address_get_8bit(channel)
 
         dbg_log('DMA write channel ' + channel, LOG_DMA)
@@ -342,7 +342,7 @@ export class DMA {
             dbg_log('DMA read outside of buffer', LOG_DMA)
             fn(true)
         } else {
-            var cpu = this.cpu
+            const cpu = this.cpu
             this.channel_addr[channel] += read_count
 
             buffer.get(start, read_count, function (data: Uint8Array) {
@@ -361,13 +361,13 @@ export class DMA {
         channel: number,
         fn: (error: boolean) => void,
     ): void {
-        var read_count = (this.channel_count[channel] + 1) & 0xffff,
-            bytes_per_count = channel >= 5 ? 2 : 1,
-            read_bytes = read_count * bytes_per_count,
-            addr = this.address_get_8bit(channel),
+        let read_count = (this.channel_count[channel] + 1) & 0xffff,
+            read_bytes = read_count * (channel >= 5 ? 2 : 1),
             unfinished = false,
-            want_more = false,
-            autoinit = this.channel_mode[channel] & 0x10
+            want_more = false
+        const bytes_per_count = channel >= 5 ? 2 : 1
+        const addr = this.address_get_8bit(channel)
+        const autoinit = this.channel_mode[channel] & 0x10
 
         dbg_log('DMA write channel ' + channel, LOG_DMA)
         dbg_log('to ' + h(addr) + ' len ' + h(read_bytes), LOG_DMA)
@@ -418,7 +418,7 @@ export class DMA {
     }
 
     address_get_8bit(channel: number): number {
-        var addr = this.channel_addr[channel]
+        let addr = this.channel_addr[channel]
 
         // http://wiki.osdev.org/ISA_DMA#16_bit_issues
         if (channel >= 5) {
@@ -433,7 +433,7 @@ export class DMA {
     }
 
     count_get_8bit(channel: number): number {
-        var count = this.channel_count[channel] + 1
+        let count = this.channel_count[channel] + 1
 
         if (channel >= 5) {
             count *= 2

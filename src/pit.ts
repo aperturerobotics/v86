@@ -70,10 +70,10 @@ export class PIT {
         // - counter2 can be controlled by an input
 
         cpu.io.register_read(0x61, this, function (this: PIT): number {
-            var now = v86.microtick()
+            const now = v86.microtick()
 
-            var ref_toggle = (now * ((1000 * 1000) / 15000)) & 1
-            var counter2_out = this.did_rollover(2, now)
+            const ref_toggle = (now * ((1000 * 1000) / 15000)) & 1
+            const counter2_out = this.did_rollover(2, now)
 
             return (ref_toggle << 4) | (counter2_out << 5)
         })
@@ -129,7 +129,7 @@ export class PIT {
     }
 
     get_state(): PITState {
-        var state: PITState = [
+        const state: PITState = [
             this.counter_next_low,
             this.counter_enabled,
             this.counter_mode,
@@ -157,7 +157,7 @@ export class PIT {
     }
 
     timer(now: number, no_irq: boolean): number {
-        var time_to_next_interrupt = 100
+        let time_to_next_interrupt = 100
 
         // counter 0 produces interrupts
         if (!no_irq) {
@@ -176,7 +176,7 @@ export class PIT {
                 this.cpu.device_lower_irq(0)
 
                 this.cpu.device_raise_irq(0)
-                var mode = this.counter_mode[0]
+                const mode = this.counter_mode[0]
 
                 if (mode === 0) {
                     this.counter_enabled[0] = 0
@@ -202,10 +202,10 @@ export class PIT {
             return 0
         }
 
-        var diff = now - this.counter_start_time[i]
-        var diff_in_ticks = Math.floor(diff * OSCILLATOR_FREQ)
+        const diff = now - this.counter_start_time[i]
+        const diff_in_ticks = Math.floor(diff * OSCILLATOR_FREQ)
 
-        var value = this.counter_start_value[i] - diff_in_ticks
+        let value = this.counter_start_value[i] - diff_in_ticks
 
         dbg_log(
             'diff=' +
@@ -219,7 +219,7 @@ export class PIT {
             LOG_PIT,
         )
 
-        var reload = this.counter_reload[i]
+        const reload = this.counter_reload[i]
 
         if (value >= reload) {
             dbg_log(
@@ -240,7 +240,7 @@ export class PIT {
     }
 
     did_rollover(i: number, now: number): number {
-        var diff = now - this.counter_start_time[i]
+        const diff = now - this.counter_start_time[i]
 
         if (diff < 0) {
             // should only happen after restore_state
@@ -251,13 +251,13 @@ export class PIT {
             )
             return 1
         }
-        var diff_in_ticks = Math.floor(diff * OSCILLATOR_FREQ)
+        const diff_in_ticks = Math.floor(diff * OSCILLATOR_FREQ)
 
         return this.counter_start_value[i] < diff_in_ticks ? 1 : 0
     }
 
     counter_read(i: number): number {
-        var latch = this.counter_latch[i]
+        const latch = this.counter_latch[i]
 
         if (latch) {
             this.counter_latch[i]--
@@ -268,13 +268,13 @@ export class PIT {
                 return this.counter_latch_value[i] >> 8
             }
         } else {
-            var next_low = this.counter_next_low[i]
+            const next_low = this.counter_next_low[i]
 
             if (this.counter_mode[i] === 3) {
                 this.counter_next_low[i] ^= 1
             }
 
-            var value = this.get_counter_value(i, v86.microtick())
+            const value = this.get_counter_value(i, v86.microtick())
 
             if (next_low) {
                 return value & 0xff
@@ -323,8 +323,8 @@ export class PIT {
     }
 
     port43_write(reg_byte: number): void {
-        var mode = (reg_byte >> 1) & 7,
-            binary_mode = reg_byte & 1,
+        let mode = (reg_byte >> 1) & 7
+        const binary_mode = reg_byte & 1,
             i = (reg_byte >> 6) & 3,
             read_mode = (reg_byte >> 4) & 3
 
@@ -340,7 +340,7 @@ export class PIT {
         if (read_mode === 0) {
             // latch
             this.counter_latch[i] = 2
-            var value = this.get_counter_value(i, v86.microtick())
+            const value = this.get_counter_value(i, v86.microtick())
             dbg_log('latch: ' + value, LOG_PIT)
             this.counter_latch_value[i] = value ? value - 1 : 0
 
@@ -380,6 +380,7 @@ export class PIT {
         }
 
         if (mode === 0) {
+            // intentionally empty
         } else if (mode === 3 || mode === 2) {
             // what is the difference
         } else {

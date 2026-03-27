@@ -41,9 +41,9 @@ interface VirtioBalloonCPU {
     memory_size: Int32Array
 }
 
-const VIRTIO_BALLOON_F_MUST_TELL_HOST = 0
+const _VIRTIO_BALLOON_F_MUST_TELL_HOST = 0
 const VIRTIO_BALLOON_F_STATS_VQ = 1
-const VIRTIO_BALLOON_F_DEFLATE_ON_OOM = 2
+const _VIRTIO_BALLOON_F_DEFLATE_ON_OOM = 2
 const VIRTIO_BALLOON_F_FREE_PAGE_HINT = 3
 
 const STAT_NAMES: string[] = [
@@ -117,7 +117,7 @@ export class VirtioBalloon {
                             )
                             bufchain.get_next_blob(buffer)
                             this.virtio.queues[queue_id].push_reply(bufchain)
-                            let n = buffer.byteLength / 4
+                            const n = buffer.byteLength / 4
                             this.actual += queue_id === 0 ? n : -n
                             //console.log(queue_id === 0 ? "Inflate" : "Deflate", this.num_pages, this.actual, bufchain.read_buffers);
                         }
@@ -131,13 +131,13 @@ export class VirtioBalloon {
                                 bufchain.length_readable,
                             )
                             bufchain.get_next_blob(buffer)
-                            let result: Record<string, number> = {}
+                            const result: Record<string, number> = {}
                             for (
                                 let i = 0;
                                 i < bufchain.length_readable;
                                 i += 10
                             ) {
-                                let [cat, value] = marshall.Unmarshall(
+                                const [cat, value] = marshall.Unmarshall(
                                     ['h', 'd'],
                                     buffer,
                                     { offset: i },
@@ -157,9 +157,13 @@ export class VirtioBalloon {
                                     bufchain.length_readable,
                                 )
                                 bufchain.get_next_blob(buffer)
-                                let [cmd] = marshall.Unmarshall(['w'], buffer, {
-                                    offset: 0,
-                                })
+                                const [cmd] = marshall.Unmarshall(
+                                    ['w'],
+                                    buffer,
+                                    {
+                                        offset: 0,
+                                    },
+                                )
                                 if (cmd === 0) {
                                     if (this.free_cb) this.free_cb(this.zeroed)
                                     if (this.fp_cmd > 1) this.fp_cmd = 1 // Signal done
@@ -173,7 +177,7 @@ export class VirtioBalloon {
                                     i < bufchain.write_buffers.length;
                                     ++i
                                 ) {
-                                    let b = bufchain.write_buffers[i]
+                                    const b = bufchain.write_buffers[i]
                                     this.zeroed += b.len
                                     this.virtio.cpu.zero_memory(
                                         b.addr_low,

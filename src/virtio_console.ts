@@ -43,7 +43,7 @@ interface VirtioConsoleCPU {
 
 const VIRTIO_CONSOLE_DEVICE_READY = 0
 const VIRTIO_CONSOLE_DEVICE_ADD = 1
-const VIRTIO_CONSOLE_DEVICE_REMOVE = 2
+const _VIRTIO_CONSOLE_DEVICE_REMOVE = 2
 const VIRTIO_CONSOLE_PORT_READY = 3
 const VIRTIO_CONSOLE_CONSOLE_PORT = 4
 const VIRTIO_CONSOLE_RESIZE = 5
@@ -52,7 +52,7 @@ const VIRTIO_CONSOLE_PORT_NAME = 7
 
 const VIRTIO_CONSOLE_F_SIZE = 0
 const VIRTIO_CONSOLE_F_MULTIPORT = 1
-const VIRTIO_CONSOLE_F_EMERG_WRITE = 2
+const _VIRTIO_CONSOLE_F_EMERG_WRITE = 2
 
 export class VirtioConsole {
     bus: BusConnector
@@ -163,7 +163,7 @@ export class VirtioConsole {
                             )
                             const port = parts[0]
                             const event = parts[1]
-                            const value = parts[2]
+                            const _value = parts[2]
 
                             this.Ack(queue_id, bufchain)
 

@@ -58,7 +58,7 @@ export class NetworkAdapter {
     handle_open(_e: Event): void {
         //console.log("open", e);
 
-        for (var i = 0; i < this.send_queue.length; i++) {
+        for (let i = 0; i < this.send_queue.length; i++) {
             this.send(this.send_queue[i])
         }
 
@@ -82,7 +82,7 @@ export class NetworkAdapter {
         }
 
         if (this.socket) {
-            var state = this.socket.readyState
+            const state = this.socket.readyState
 
             if (state === 0 || state === 1) {
                 // already or almost there
@@ -90,7 +90,7 @@ export class NetworkAdapter {
             }
         }
 
-        var now = Date.now()
+        const now = Date.now()
 
         if (this.last_connect_attempt + this.reconnect_interval > now) {
             return

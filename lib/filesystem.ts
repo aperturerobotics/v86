@@ -44,10 +44,10 @@ export const S_IFCHR = 0x2000
 //var S_ISGID  0002000
 //var S_ISVTX  0001000
 
-var O_RDONLY = 0x0000 // open for reading only
-var O_WRONLY = 0x0001 // open for writing only
-var O_RDWR = 0x0002 // open for reading and writing
-var O_ACCMODE = 0x0003 // mask for above modes
+const _O_RDONLY = 0x0000 // open for reading only
+const _O_WRONLY = 0x0001 // open for writing only
+const _O_RDWR = 0x0002 // open for reading and writing
+const _O_ACCMODE = 0x0003 // mask for above modes
 
 export const STATUS_INVALID = -0x1
 export const STATUS_OK = 0x0
@@ -86,7 +86,6 @@ export class FSLockRegion {
     proc_id: number = -1
     client_id: string = ''
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
         const state: (number | string)[] = []
 
@@ -100,7 +99,6 @@ export class FSLockRegion {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.type = state[0]
         this.start = state[1]
@@ -183,9 +181,7 @@ export class Inode {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const state: any[] = []
         state[0] = this.mode
 
@@ -220,7 +216,6 @@ export class Inode {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.mode = state[0]
 
@@ -273,9 +268,7 @@ class FSMountInfo {
         this.backtrack = new Map()
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const state: any[] = []
 
         state[0] = this.fs
@@ -284,17 +277,15 @@ class FSMountInfo {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.fs = state[0]
         this.backtrack = new Map(state[1])
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface JsonFS {
     version: number
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     fsroot: any[]
     size: number
 }
@@ -321,9 +312,7 @@ export class FS {
         this.CreateDirectory('', -1)
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let state: any[] = []
 
         state[0] = this.inodes
@@ -341,9 +330,7 @@ export class FS {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.inodes = state[0].map((s: any) => {
             const inode = new Inode(0)
             inode.set_state(s)
@@ -351,7 +338,8 @@ export class FS {
         })
         this.qidcounter.last_qidnumber = state[1]
         this.inodedata = {}
-        for (let [key, value] of state[2]) {
+        for (const [key, rawValue] of state[2]) {
+            let value = rawValue
             if (value.buffer.byteLength !== value.byteLength) {
                 // make a copy if we didn't get one
                 value = value.slice()
@@ -373,17 +361,16 @@ export class FS {
             throw 'The filesystem JSON format has changed. Please recreate the filesystem JSON.'
         }
 
-        var fsroot = fs['fsroot']
+        const fsroot = fs['fsroot']
         this.used_size = fs['size']
 
-        for (var i = 0; i < fsroot.length; i++) {
+        for (let i = 0; i < fsroot.length; i++) {
             this.LoadRecursive(fsroot[i], 0)
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private LoadRecursive(data: any[], parentid: number): void {
-        var inode = this.CreateInode()
+        const inode = this.CreateInode()
 
         const name = data[JSONFS_IDX_NAME]
         inode.size = data[JSONFS_IDX_SIZE]
@@ -394,7 +381,7 @@ export class FS {
         inode.uid = data[JSONFS_IDX_UID]
         inode.gid = data[JSONFS_IDX_GID]
 
-        var ifmt = inode.mode & S_IFMT
+        const ifmt = inode.mode & S_IFMT
 
         if (ifmt === S_IFDIR) {
             this.PushInode(inode, parentid, name)
@@ -414,9 +401,8 @@ export class FS {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private LoadDir(parentid: number, children: any[]): void {
-        for (var i = 0; i < children.length; i++) {
+        for (let i = 0; i < children.length; i++) {
             this.LoadRecursive(children[i], parentid)
         }
     }
@@ -620,7 +606,7 @@ export class FS {
             )
             return this.create_forwarder(parent_inode.mount_id, foreign_id)
         }
-        var x = this.CreateInode()
+        const x = this.CreateInode()
         x.mode = 0x01ff | S_IFDIR
         if (parentid >= 0) {
             x.uid = this.inodes[parentid].uid
@@ -643,7 +629,7 @@ export class FS {
             )
             return this.create_forwarder(parent_inode.mount_id, foreign_id)
         }
-        var x = this.CreateInode()
+        const x = this.CreateInode()
         x.uid = this.inodes[parentid].uid
         x.gid = this.inodes[parentid].gid
         x.qid.type = S_IFREG >> 8
@@ -670,7 +656,7 @@ export class FS {
             )
             return this.create_forwarder(parent_inode.mount_id, foreign_id)
         }
-        var x = this.CreateInode()
+        const x = this.CreateInode()
         x.major = major
         x.minor = minor
         x.uid = this.inodes[parentid].uid
@@ -692,7 +678,7 @@ export class FS {
             )
             return this.create_forwarder(parent_inode.mount_id, foreign_id)
         }
-        var x = this.CreateInode()
+        const x = this.CreateInode()
         x.uid = this.inodes[parentid].uid
         x.gid = this.inodes[parentid].gid
         x.qid.type = S_IFLNK >> 8
@@ -715,11 +701,11 @@ export class FS {
             ).CreateTextFile(filename, foreign_parentid, str)
             return this.create_forwarder(parent_inode.mount_id, foreign_id)
         }
-        var id = this.CreateFile(filename, parentid)
-        var x = this.inodes[id]
-        var data = new Uint8Array(str.length)
+        const id = this.CreateFile(filename, parentid)
+        const x = this.inodes[id]
+        const data = new Uint8Array(str.length)
         x.size = str.length
-        for (var j = 0; j < str.length; j++) {
+        for (let j = 0; j < str.length; j++) {
             data[j] = str.charCodeAt(j)
         }
         await this.set_data(id, data)
@@ -739,9 +725,9 @@ export class FS {
             ).CreateBinaryFile(filename, foreign_parentid, buffer)
             return this.create_forwarder(parent_inode.mount_id, foreign_id)
         }
-        var id = this.CreateFile(filename, parentid)
-        var x = this.inodes[id]
-        var data = new Uint8Array(buffer.length)
+        const id = this.CreateFile(filename, parentid)
+        const x = this.inodes[id]
+        const data = new Uint8Array(buffer.length)
         data.set(buffer)
         await this.set_data(id, data)
         x.size = buffer.length
@@ -749,7 +735,7 @@ export class FS {
     }
 
     async OpenInode(id: number, mode: number | undefined): Promise<void> {
-        var inode = this.inodes[id]
+        const inode = this.inodes[id]
         if (this.is_forwarder(inode)) {
             return await this.follow_fs(inode).OpenInode(inode.foreign_id, mode)
         }
@@ -759,7 +745,7 @@ export class FS {
     }
 
     async CloseInode(id: number): Promise<void> {
-        var inode = this.inodes[id]
+        const inode = this.inodes[id]
         if (this.is_forwarder(inode)) {
             return await this.follow_fs(inode).CloseInode(inode.foreign_id)
         }
@@ -781,22 +767,22 @@ export class FS {
         if (olddirid === newdirid && oldname === newname) {
             return 0
         }
-        var oldid = this.Search(olddirid, oldname)
+        const oldid = this.Search(olddirid, oldname)
         if (oldid === -1) {
             return -ENOENT
         }
 
         // For event notification near end of method.
-        var oldpath = this.GetFullPath(olddirid) + '/' + oldname
+        const oldpath = this.GetFullPath(olddirid) + '/' + oldname
 
-        var newid = this.Search(newdirid, newname)
+        const newid = this.Search(newdirid, newname)
         if (newid !== -1) {
             const ret = this.Unlink(newdirid, newname)
             if (ret < 0) return ret
         }
 
-        var idx = oldid // idx contains the id which we want to rename
-        var inode = this.inodes[idx]
+        const idx = oldid // idx contains the id which we want to rename
+        const inode = this.inodes[idx]
         const olddir = this.inodes[olddirid]
         const newdir = this.inodes[newdirid]
 
@@ -913,7 +899,7 @@ export class FS {
         buffer: Uint8Array | null,
     ): Promise<void> {
         this.NotifyListeners(id, 'write')
-        var inode = this.inodes[id]
+        const inode = this.inodes[id]
 
         if (this.is_forwarder(inode)) {
             const foreign_id = inode.foreign_id
@@ -921,7 +907,7 @@ export class FS {
             return
         }
 
-        var data = await this.get_buffer(id)
+        let data = await this.get_buffer(id)
 
         if (!data || data.length < offset + count) {
             await this.ChangeSize(id, Math.floor(((offset + count) * 3) / 2))
@@ -1001,7 +987,7 @@ export class FS {
         for (const { fs } of this.mounts) {
             size += fs.GetSpace()
         }
-        return this.total_size
+        return size
     }
 
     GetDirectoryName(idx: number): string {
@@ -1033,7 +1019,7 @@ export class FS {
             'Filesystem: Cannot get full path of non-directory inode',
         )
 
-        var path = ''
+        let path = ''
 
         while (idx !== 0) {
             path = '/' + this.GetDirectoryName(idx) + path
@@ -1205,13 +1191,13 @@ export class FS {
     }
 
     async ChangeSize(idx: number, newsize: number): Promise<void> {
-        var inode = this.GetInode(idx)
-        var temp = await this.get_data(idx, 0, inode.size)
+        const inode = this.GetInode(idx)
+        const temp = await this.get_data(idx, 0, inode.size)
         if (newsize === inode.size) return
-        var data = new Uint8Array(newsize)
+        const data = new Uint8Array(newsize)
         inode.size = newsize
         if (temp) {
-            var size = Math.min(temp.length, inode.size)
+            const size = Math.min(temp.length, inode.size)
             data.set(temp.subarray(0, size), 0)
         }
         await this.set_data(idx, data)
@@ -1219,15 +1205,16 @@ export class FS {
 
     SearchPath(path: string): SearchPathResult {
         path = path.replace('//', '/')
-        var walk = path.split('/')
+        const walk = path.split('/')
         if (walk.length > 0 && walk[walk.length - 1].length === 0) walk.pop()
         if (walk.length > 0 && walk[0].length === 0) walk.shift()
         const n = walk.length
 
-        var parentid = -1
-        var id = 0
+        let parentid = -1
+        let id = 0
         let forward_path: string | null = null
-        for (var i = 0; i < n; i++) {
+        let i = 0
+        for (i = 0; i < n; i++) {
             parentid = id
             id = this.Search(parentid, walk[i])
             if (!forward_path && this.is_forwarder(this.inodes[parentid])) {
@@ -1284,13 +1271,13 @@ export class FS {
     }
 
     RecursiveDelete(path: string): void {
-        var toDelete: { parentid: number; name: string }[] = []
-        var ids = this.SearchPath(path)
+        const toDelete: { parentid: number; name: string }[] = []
+        const ids = this.SearchPath(path)
         if (ids.id === -1) return
 
         this.GetRecursiveList(ids.id, toDelete)
 
-        for (var i = toDelete.length - 1; i >= 0; i--) {
+        for (let i = toDelete.length - 1; i >= 0; i--) {
             const ret = this.Unlink(toDelete[i].parentid, toDelete[i].name)
             dbg_assert(
                 ret === 0,
@@ -1305,7 +1292,7 @@ export class FS {
     }
 
     DeleteNode(path: string): void {
-        var ids = this.SearchPath(path)
+        const ids = this.SearchPath(path)
         if (ids.id === -1) return
 
         if ((this.inodes[ids.id].mode & S_IFMT) === S_IFREG) {
@@ -1324,8 +1311,7 @@ export class FS {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    NotifyListeners(id: number, action: string, info?: any): void {
+    NotifyListeners(_id: number, _action: string, _info?: any): void {
         //if(info==undefined)
         //    info = {};
         //var path = this.GetFullPath(id);
@@ -1342,10 +1328,10 @@ export class FS {
     }
 
     Check(): void {
-        for (var i = 1; i < this.inodes.length; i++) {
+        for (let i = 1; i < this.inodes.length; i++) {
             if (this.inodes[i].status === STATUS_INVALID) continue
 
-            var inode = this.GetInode(i)
+            const inode = this.GetInode(i)
             if (inode.nlinks < 0) {
                 dbg_log(
                     'Error in filesystem: negative nlinks=' +
@@ -1509,7 +1495,7 @@ export class FS {
 
     // only support for security.capabilities
     PrepareCAPs(id: number): number {
-        var inode = this.GetInode(id)
+        const inode = this.GetInode(id)
         if (inode.caps) return inode.caps.length
         inode.caps = new Uint8Array(20)
         // format is little endian

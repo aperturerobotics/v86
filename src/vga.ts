@@ -427,7 +427,7 @@ export class VGAScreen {
 
         this.dest_buffet_offset = 0
 
-        var io = cpu.io
+        const io = cpu.io
 
         io.register_write(0x3c0, this, this.port3C0_write)
         io.register_read(0x3c0, this, this.port3C0_read, this.port3C0_read16)
@@ -547,7 +547,7 @@ export class VGAScreen {
     }
 
     get_state(): any[] {
-        var state: any[] = []
+        const state: any[] = []
 
         state[0] = this.vga_memory_size
         state[1] = this.cursor_address
@@ -625,7 +625,9 @@ export class VGAScreen {
         this.cursor_scanline_end = state[3]
         this.max_cols = state[4]
         this.max_rows = state[5]
-        state[6] && this.vga_memory.set(state[6])
+        if (state[6]) {
+            this.vga_memory.set(state[6])
+        }
         this.dac_state = state[7]
         this.start_address = state[8]
         this.graphical_mode = state[9]
@@ -680,7 +682,9 @@ export class VGAScreen {
         this.color_select = state[58]
         this.clocking_mode = state[59]
         this.line_compare = state[60]
-        state[61] && this.pixel_buffer.set(state[61])
+        if (state[61]) {
+            this.pixel_buffer.set(state[61])
+        }
         this.dac_mask = state[62] === undefined ? 0xff : state[62]
         this.character_map_select = state[63] === undefined ? 0 : state[63]
         this.font_page_ab_enabled = state[64] === undefined ? false : state[64]
@@ -725,7 +729,7 @@ export class VGAScreen {
             )
         }
 
-        var memory_space_select =
+        const memory_space_select =
             (this.miscellaneous_graphics_register >> 2) & 0x3
         addr -= VGA_HOST_MEMORY_SPACE_START[memory_space_select]
 
@@ -748,7 +752,7 @@ export class VGAScreen {
 
         if (this.planar_mode & 0x08) {
             // read mode 1
-            var reading = 0xff
+            let reading = 0xff
 
             if (this.color_dont_care & 0x1) {
                 reading &=
@@ -775,7 +779,7 @@ export class VGAScreen {
         } else {
             // read mode 0
 
-            var plane = this.plane_read
+            let plane = this.plane_read
             if (!this.graphical_mode) {
                 // We store all text data linearly and font data in plane 2.
                 // TODO: works well for planes 0 and 2, but what about plane 1?
@@ -804,7 +808,7 @@ export class VGAScreen {
             return
         }
 
-        var memory_space_select =
+        const memory_space_select =
             (this.miscellaneous_graphics_register >> 2) & 0x3
         addr -= VGA_HOST_MEMORY_SPACE_START[memory_space_select]
 
@@ -835,11 +839,11 @@ export class VGAScreen {
     }
 
     vga_memory_write_graphical(addr: number, value: number): void {
-        var plane_dword: number = 0
-        var write_mode = this.planar_mode & 3
-        var bitmask = this.apply_feed(this.planar_bitmap)
-        var setreset_dword = this.apply_expand(this.planar_setreset)
-        var setreset_enable_dword = this.apply_expand(
+        let plane_dword: number = 0
+        const write_mode = this.planar_mode & 3
+        let bitmask = this.apply_feed(this.planar_bitmap)
+        const setreset_dword = this.apply_expand(this.planar_setreset)
+        const setreset_enable_dword = this.apply_expand(
             this.planar_setreset_enable,
         )
 
@@ -871,7 +875,7 @@ export class VGAScreen {
                 break
         }
 
-        var plane_select = 0xf
+        let plane_select = 0xf
 
         switch (this.sequencer_memory_mode & 0xc) {
             // Odd/Even (aka chain 2)
@@ -900,14 +904,14 @@ export class VGAScreen {
         if (plane_select & 0x4) this.plane2[addr] = (plane_dword >> 16) & 0xff
         if (plane_select & 0x8) this.plane3[addr] = (plane_dword >> 24) & 0xff
 
-        var pixel_addr = this.vga_addr_to_pixel(addr)
+        const pixel_addr = this.vga_addr_to_pixel(addr)
         this.partial_replot(pixel_addr, pixel_addr + 7)
     }
 
     // Copies data_byte into the four planes, with each plane
     // represented by an 8-bit field inside the dword.
     apply_feed(data_byte: number): number {
-        var dword = data_byte
+        let dword = data_byte
         dword |= data_byte << 8
         dword |= data_byte << 16
         dword |= data_byte << 24
@@ -917,7 +921,7 @@ export class VGAScreen {
     // Expands bits 0 to 3 to ocupy bits 0 to 31. Each
     // bit is expanded to 0xFF if set or 0x00 if clear.
     apply_expand(data_byte: number): number {
-        var dword = data_byte & 0x1 ? 0xff : 0x00
+        let dword = data_byte & 0x1 ? 0xff : 0x00
         dword |= (data_byte & 0x2 ? 0xff : 0x00) << 8
         dword |= (data_byte & 0x4 ? 0xff : 0x00) << 16
         dword |= (data_byte & 0x8 ? 0xff : 0x00) << 24
@@ -928,9 +932,9 @@ export class VGAScreen {
     // @see http://www.phatcode.net/res/224/files/html/ch25/25-01.html#Heading3
     // @see http://www.osdever.net/FreeVGA/vga/graphreg.htm#03
     apply_rotate(data_byte: number): number {
-        var wrapped = data_byte | (data_byte << 8)
-        var count = this.planar_rotate_reg & 0x7
-        var shifted = wrapped >>> count
+        const wrapped = data_byte | (data_byte << 8)
+        const count = this.planar_rotate_reg & 0x7
+        const shifted = wrapped >>> count
         return shifted & 0xff
     }
 
@@ -938,7 +942,7 @@ export class VGAScreen {
     // @see http://www.phatcode.net/res/224/files/html/ch25/25-03.html#Heading5
     // @see http://www.osdever.net/FreeVGA/vga/graphreg.htm#00
     apply_setreset(data_dword: number, enable_dword: number): number {
-        var setreset_dword = this.apply_expand(this.planar_setreset)
+        const setreset_dword = this.apply_expand(this.planar_setreset)
         data_dword |= enable_dword & setreset_dword
         data_dword &= ~enable_dword | setreset_dword
         return data_dword
@@ -963,7 +967,7 @@ export class VGAScreen {
     // @see http://www.phatcode.net/res/224/files/html/ch25/25-01.html#Heading2
     // @see http://www.osdever.net/FreeVGA/vga/graphreg.htm#08
     apply_bitmask(data_dword: number, bitmask_dword: number): number {
-        var plane_dword = bitmask_dword & data_dword
+        let plane_dword = bitmask_dword & data_dword
         plane_dword |= ~bitmask_dword & this.latch_dword
         return plane_dword
     }
@@ -1152,7 +1156,7 @@ export class VGAScreen {
     destroy(): void {}
 
     vga_bytes_per_line(): number {
-        var bytes_per_line = this.offset_register << 2
+        let bytes_per_line = this.offset_register << 2
         if (this.underline_location_register & 0x40) bytes_per_line <<= 1
         else if (this.crtc_mode & 0x40) bytes_per_line >>>= 1
         return bytes_per_line
@@ -1161,7 +1165,7 @@ export class VGAScreen {
     vga_addr_shift_count(): number {
         // Count in multiples of 0x40 for convenience
         // Left shift 2 for word mode - 2 bytes per dot clock
-        var shift_count = 0x80
+        let shift_count = 0x80
 
         // Left shift 3 for byte mode - 1 byte per dot clock
         shift_count += ~this.underline_location_register & this.crtc_mode & 0x40
@@ -1176,7 +1180,7 @@ export class VGAScreen {
     }
 
     vga_addr_to_pixel(addr: number): number {
-        var shift_count = this.vga_addr_shift_count()
+        const shift_count = this.vga_addr_shift_count()
 
         // Undo effects of substituted bits 13 and 14
         // Assumptions:
@@ -1184,7 +1188,7 @@ export class VGAScreen {
         //  - Each scan line stays within the offset alignment
         //  - No panning and no page flipping after drawing
         if (~this.crtc_mode & 0x3) {
-            var pixel_addr = addr - this.start_address
+            let pixel_addr = addr - this.start_address
 
             // Remove substituted bits
             pixel_addr &= (this.crtc_mode << 13) | ~0x6000
@@ -1193,8 +1197,8 @@ export class VGAScreen {
             pixel_addr <<= shift_count
 
             // Decompose address
-            var row = (pixel_addr / this.virtual_width) | 0
-            var col = pixel_addr % this.virtual_width
+            let row = (pixel_addr / this.virtual_width) | 0
+            const col = pixel_addr % this.virtual_width
 
             switch (this.crtc_mode & 0x3) {
                 case 0x2:
@@ -1235,7 +1239,7 @@ export class VGAScreen {
 
         // Maximum scan line, aka scan lines per character row
         // This is the number of repeats - 1 for graphic modes
-        var repeat_factor = 1 + (this.max_scan_line & 0x1f)
+        const repeat_factor = 1 + (this.max_scan_line & 0x1f)
         scan_line = Math.ceil(scan_line / repeat_factor)
 
         // Odd and Even Row Scan Counter
@@ -1328,11 +1332,11 @@ export class VGAScreen {
             return
         }
 
-        var horizontal_characters = Math.min(
+        const horizontal_characters = Math.min(
             1 + this.horizontal_display_enable_end,
             this.horizontal_blank_start,
         )
-        var vertical_scans = Math.min(
+        let vertical_scans = Math.min(
             1 + this.vertical_display_enable_end,
             this.vertical_blank_start,
         )
@@ -1344,15 +1348,15 @@ export class VGAScreen {
         }
 
         if (this.graphical_mode) {
-            var screen_width = horizontal_characters << 3
+            let screen_width = horizontal_characters << 3
 
             // Offset is half the number of bytes/words/dwords (depending on clocking mode)
             // of display memory that each logical line occupies.
             // However, the number of pixels latched, regardless of addressing mode,
             // should always 8 pixels per character clock (except for 8 bit PEL width, in which
             // case 4 pixels).
-            var virtual_width = this.offset_register << 4
-            var bpp = 4
+            let virtual_width = this.offset_register << 4
+            let bpp = 4
 
             // Pixel Width / PEL Width / Clock Select
             if (this.attribute_mode & 0x40) {
@@ -1363,7 +1367,7 @@ export class VGAScreen {
                 bpp = 1
             }
 
-            var screen_height = this.scan_line_to_screen_row(vertical_scans)
+            const screen_height = this.scan_line_to_screen_row(vertical_scans)
 
             // The virtual buffer height is however many rows of data that can fit.
             // Previously drawn graphics outside of current memory address space can
@@ -1371,7 +1375,7 @@ export class VGAScreen {
             // VGA_HOST_MEMORY_SPACE_START[memory_space_select] is mapped to the first
             // byte of the frame buffer. Verified on some hardware.
             // Depended on by: Windows 98 start screen
-            var available_bytes = VGA_HOST_MEMORY_SPACE_SIZE[0]
+            const available_bytes = VGA_HOST_MEMORY_SPACE_SIZE[0]
 
             const bytes_per_line = this.vga_bytes_per_line()
             const virtual_height = bytes_per_line
@@ -1395,7 +1399,7 @@ export class VGAScreen {
                 vertical_scans >>>= 1
             }
 
-            var height =
+            const height =
                 (vertical_scans / (1 + (this.max_scan_line & 0x1f))) | 0
 
             if (horizontal_characters && height) {
@@ -1428,31 +1432,33 @@ export class VGAScreen {
             return
         }
 
-        var start_addr = this.start_address_latched
+        const start_addr = this.start_address_latched
 
-        var pixel_panning = this.horizontal_panning
+        let pixel_panning = this.horizontal_panning
         if (this.attribute_mode & 0x40) {
             pixel_panning >>>= 1
         }
 
-        var byte_panning = (this.preset_row_scan >> 5) & 0x3
-        var pixel_addr_start = this.vga_addr_to_pixel(start_addr + byte_panning)
+        const byte_panning = (this.preset_row_scan >> 5) & 0x3
+        const pixel_addr_start = this.vga_addr_to_pixel(
+            start_addr + byte_panning,
+        )
 
-        var start_buffer_row = (pixel_addr_start / this.virtual_width) | 0
-        var start_buffer_col =
+        const start_buffer_row = (pixel_addr_start / this.virtual_width) | 0
+        const start_buffer_col =
             (pixel_addr_start % this.virtual_width) + pixel_panning
 
-        var split_screen_row = this.scan_line_to_screen_row(
+        let split_screen_row = this.scan_line_to_screen_row(
             1 + this.line_compare,
         )
         split_screen_row = Math.min(split_screen_row, this.screen_height)
 
-        var split_buffer_height = this.screen_height - split_screen_row
+        const split_buffer_height = this.screen_height - split_screen_row
 
         this.layers = []
 
         for (
-            var x = -start_buffer_col, y = 0;
+            let x = -start_buffer_col, y = 0;
             x < this.screen_width;
             x += this.virtual_width, y++
         ) {
@@ -1467,7 +1473,7 @@ export class VGAScreen {
             })
         }
 
-        var start_split_col = 0
+        let start_split_col = 0
         if (!(this.attribute_mode & 0x20)) {
             // Pixel panning mode. Allow panning for the lower split screen
             start_split_col =
@@ -1475,7 +1481,7 @@ export class VGAScreen {
         }
 
         for (
-            var x = -start_split_col, y = 0;
+            let x = -start_split_col, y = 0;
             x < this.screen_width;
             x += this.virtual_width, y++
         ) {
@@ -1550,7 +1556,7 @@ export class VGAScreen {
                             LOG_VGA,
                         )
                         if (this.attribute_mode !== value) {
-                            var previous_mode = this.attribute_mode
+                            const previous_mode = this.attribute_mode
                             this.attribute_mode = value
 
                             const is_graphical = (value & 0x1) !== 0
@@ -1698,9 +1704,9 @@ export class VGAScreen {
     // @see https://01.org/sites/default/files/documentation/intel-gfx-prm-osrc-hsw-display_0.pdf page 19
     port3C5_write(value: number): void {
         switch (this.sequencer_index) {
-            case 0x01:
+            case 0x01: {
                 dbg_log('clocking mode: ' + h(value), LOG_VGA)
-                var previous_clocking_mode = this.clocking_mode
+                const previous_clocking_mode = this.clocking_mode
                 this.clocking_mode = value
                 if ((previous_clocking_mode ^ value) & 0x20) {
                     // Screen disable bit modified
@@ -1708,9 +1714,10 @@ export class VGAScreen {
                 }
                 this.set_font_bitmap(false)
                 break
-            case 0x02:
+            }
+            case 0x02: {
                 dbg_log('plane write mask: ' + h(value), LOG_VGA)
-                var previous_plane_write_bm = this.plane_write_bm
+                const previous_plane_write_bm = this.plane_write_bm
                 this.plane_write_bm = value
                 if (
                     !this.graphical_mode &&
@@ -1721,9 +1728,10 @@ export class VGAScreen {
                     this.set_font_bitmap(true)
                 }
                 break
-            case 0x03:
+            }
+            case 0x03: {
                 dbg_log('character map select: ' + h(value), LOG_VGA)
-                var previous_character_map_select = this.character_map_select
+                const previous_character_map_select = this.character_map_select
                 this.character_map_select = value
                 if (
                     !this.graphical_mode &&
@@ -1732,6 +1740,7 @@ export class VGAScreen {
                     this.set_font_page()
                 }
                 break
+            }
             case 0x04:
                 dbg_log('sequencer memory mode: ' + h(value), LOG_VGA)
                 this.sequencer_memory_mode = value
@@ -1803,9 +1812,9 @@ export class VGAScreen {
     // @see http://www.mcamafia.de/pdf/ibm_vgaxga_trm2.pdf page 104
     // @see https://01.org/sites/default/files/documentation/intel-gfx-prm-osrc-hsw-display_0.pdf page 57
     port3C9_write(color_byte: number): void {
-        var index = (this.dac_color_index_write / 3) | 0,
-            offset = this.dac_color_index_write % 3,
-            color = this.vga256_palette[index]
+        const index = (this.dac_color_index_write / 3) | 0,
+            offset = this.dac_color_index_write % 3
+        let color = this.vga256_palette[index]
 
         if ((this.dispi_enable_value & 0x20) === 0) {
             color_byte &= 0x3f
@@ -1835,10 +1844,10 @@ export class VGAScreen {
     port3C9_read(): number {
         dbg_log('3C9 read', LOG_VGA)
 
-        var index = (this.dac_color_index_read / 3) | 0
-        var offset = this.dac_color_index_read % 3
-        var color = this.vga256_palette[index]
-        var color8 = (color >> ((2 - offset) * 8)) & 0xff
+        const index = (this.dac_color_index_read / 3) | 0
+        const offset = this.dac_color_index_read % 3
+        const color = this.vga256_palette[index]
+        const color8 = (color >> ((2 - offset) * 8)) & 0xff
 
         this.dac_color_index_read++
 
@@ -1888,8 +1897,8 @@ export class VGAScreen {
                 this.plane_read = value
                 dbg_log('plane read: ' + h(value), LOG_VGA)
                 break
-            case 5:
-                var previous_planar_mode = this.planar_mode
+            case 5: {
+                const previous_planar_mode = this.planar_mode
                 this.planar_mode = value
                 dbg_log('planar mode: ' + h(value), LOG_VGA)
                 if ((previous_planar_mode ^ value) & 0x60) {
@@ -1897,6 +1906,7 @@ export class VGAScreen {
                     this.complete_replot()
                 }
                 break
+            }
             case 6:
                 dbg_log('miscellaneous graphics register: ' + h(value), LOG_VGA)
                 if (this.miscellaneous_graphics_register !== value) {
@@ -1984,9 +1994,9 @@ export class VGAScreen {
                     this.update_vga_size()
                 }
                 break
-            case 0x7:
+            case 0x7: {
                 dbg_log('3D5 / overflow register write: ' + h(value), LOG_VGA)
-                var previous_vertical_display_enable_end =
+                const previous_vertical_display_enable_end =
                     this.vertical_display_enable_end
                 this.vertical_display_enable_end &= 0xff
                 this.vertical_display_enable_end |=
@@ -2000,7 +2010,7 @@ export class VGAScreen {
                 this.line_compare =
                     (this.line_compare & 0x2ff) | ((value << 4) & 0x100)
 
-                var previous_vertical_blank_start = this.vertical_blank_start
+                const previous_vertical_blank_start = this.vertical_blank_start
                 this.vertical_blank_start =
                     (this.vertical_blank_start & 0x2ff) | ((value << 5) & 0x100)
                 if (
@@ -2010,24 +2020,25 @@ export class VGAScreen {
                 }
                 this.update_layers()
                 break
+            }
             case 0x8:
                 dbg_log('3D5 / preset row scan write: ' + h(value), LOG_VGA)
                 this.preset_row_scan = value
                 this.update_layers()
                 break
-            case 0x9:
+            case 0x9: {
                 dbg_log('3D5 / max scan line write: ' + h(value), LOG_VGA)
-                var previous_max_scan_line = this.max_scan_line
+                const previous_max_scan_line = this.max_scan_line
                 this.max_scan_line = value
                 this.line_compare =
                     (this.line_compare & 0x1ff) | ((value << 3) & 0x200)
 
-                var previous_vertical_blank_start = this.vertical_blank_start
+                const previous_vertical_blank_start2 = this.vertical_blank_start
                 this.vertical_blank_start =
                     (this.vertical_blank_start & 0x1ff) | ((value << 4) & 0x200)
                 if (
                     (previous_max_scan_line ^ this.max_scan_line) & 0x9f ||
-                    previous_vertical_blank_start !== this.vertical_blank_start
+                    previous_vertical_blank_start2 !== this.vertical_blank_start
                 ) {
                     this.update_vga_size()
                 }
@@ -2037,6 +2048,7 @@ export class VGAScreen {
 
                 this.set_font_bitmap(false)
                 break
+            }
             case 0xa:
                 dbg_log(
                     '3D5 / cursor scanline start write: ' + h(value),
@@ -2122,7 +2134,7 @@ export class VGAScreen {
             case 0x14:
                 dbg_log('3D5 / underline location write: ' + h(value), LOG_VGA)
                 if (this.underline_location_register !== value) {
-                    var previous_underline = this.underline_location_register
+                    const previous_underline = this.underline_location_register
 
                     this.underline_location_register = value
                     this.update_vga_size()
@@ -2147,7 +2159,7 @@ export class VGAScreen {
             case 0x17:
                 dbg_log('3D5 / crtc mode write: ' + h(value), LOG_VGA)
                 if (this.crtc_mode !== value) {
-                    var previous_mode = this.crtc_mode
+                    const previous_mode = this.crtc_mode
 
                     this.crtc_mode = value
                     this.update_vga_size()
@@ -2240,7 +2252,7 @@ export class VGAScreen {
     port3DA_read(): number {
         dbg_log('3DA read - status 1 and clear attr index', LOG_VGA)
 
-        var value = this.port_3DA_value
+        const value = this.port_3DA_value
 
         // Status register, bit 3 set by update_vertical_retrace
         // during screen-fill-buffer
@@ -2473,20 +2485,23 @@ export class VGAScreen {
     // Pixel Buffer caches the 4-bit or 8-bit color indices for each pixel.
     vga_replot(): void {
         // Round to multiple of 8 towards extreme
-        var start = this.diff_plot_min & ~0xf
-        var end = Math.min(this.diff_plot_max | 0xf, VGA_PIXEL_BUFFER_SIZE - 1)
+        const start = this.diff_plot_min & ~0xf
+        const end = Math.min(
+            this.diff_plot_max | 0xf,
+            VGA_PIXEL_BUFFER_SIZE - 1,
+        )
 
-        var addr_shift = this.vga_addr_shift_count()
-        var addr_substitution = ~this.crtc_mode & 0x3
+        const addr_shift = this.vga_addr_shift_count()
+        const addr_substitution = ~this.crtc_mode & 0x3
 
-        var shift_mode = this.planar_mode & 0x60
-        var pel_width = this.attribute_mode & 0x40
+        const shift_mode = this.planar_mode & 0x60
+        const pel_width = this.attribute_mode & 0x40
 
-        for (var pixel_addr = start; pixel_addr <= end; ) {
-            var addr = pixel_addr >>> addr_shift
+        for (let pixel_addr = start; pixel_addr <= end; ) {
+            let addr = pixel_addr >>> addr_shift
             if (addr_substitution) {
-                var row = (pixel_addr / this.virtual_width) | 0
-                var col = pixel_addr - this.virtual_width * row
+                let row = (pixel_addr / this.virtual_width) | 0
+                const col = pixel_addr - this.virtual_width * row
 
                 switch (addr_substitution) {
                     case 0x1:
@@ -2514,12 +2529,12 @@ export class VGAScreen {
                     this.start_address
             }
 
-            var byte0 = this.plane0[addr]
-            var byte1 = this.plane1[addr]
-            var byte2 = this.plane2[addr]
-            var byte3 = this.plane3[addr]
+            let byte0 = this.plane0[addr]
+            let byte1 = this.plane1[addr]
+            let byte2 = this.plane2[addr]
+            let byte3 = this.plane3[addr]
 
-            var shift_loads = new Uint8Array(8)
+            const shift_loads = new Uint8Array(8)
             switch (shift_mode) {
                 // Planar Shift Mode
                 // See http://www.osdever.net/FreeVGA/vga/vgaseq.htm
@@ -2531,7 +2546,7 @@ export class VGAScreen {
                     byte2 <<= 2
                     byte3 <<= 3
 
-                    for (var i = 7; i >= 0; i--) {
+                    for (let i = 7; i >= 0; i--) {
                         shift_loads[7 - i] =
                             ((byte0 >> i) & 1) |
                             ((byte1 >> i) & 2) |
@@ -2571,12 +2586,12 @@ export class VGAScreen {
 
             if (pel_width) {
                 // Assemble from two sets of 4 bits.
-                for (var i = 0, j = 0; i < 4; i++, pixel_addr++, j += 2) {
+                for (let i = 0, j = 0; i < 4; i++, pixel_addr++, j += 2) {
                     this.pixel_buffer[pixel_addr] =
                         (shift_loads[j] << 4) | shift_loads[j + 1]
                 }
             } else {
-                for (var i = 0; i < 8; i++, pixel_addr++) {
+                for (let i = 0; i < 8; i++, pixel_addr++) {
                     this.pixel_buffer[pixel_addr] = shift_loads[i]
                 }
             }
@@ -2588,16 +2603,16 @@ export class VGAScreen {
     // the internal palette (dac_map) and the DAC palette (vga256_palette) to
     // obtain the final 32 bit color that the Canvas API uses.
     vga_redraw(): void {
-        var start = this.diff_addr_min
-        var end = Math.min(this.diff_addr_max, VGA_PIXEL_BUFFER_SIZE - 1)
+        const start = this.diff_addr_min
+        const end = Math.min(this.diff_addr_max, VGA_PIXEL_BUFFER_SIZE - 1)
         const buffer = new Int32Array(
             this.cpu.wasm_memory.buffer,
             this.dest_buffet_offset,
             this.virtual_width * this.virtual_height,
         )
 
-        var mask = 0xff
-        var colorset = 0x00
+        let mask = 0xff
+        let colorset = 0x00
         if (this.attribute_mode & 0x80) {
             // Palette bits 5/4 select
             mask &= 0xcf
@@ -2607,9 +2622,10 @@ export class VGAScreen {
         if (this.attribute_mode & 0x40) {
             // 8 bit mode
 
-            for (var pixel_addr = start; pixel_addr <= end; pixel_addr++) {
-                var color256 = (this.pixel_buffer[pixel_addr] & mask) | colorset
-                var color = this.vga256_palette[color256]
+            for (let pixel_addr = start; pixel_addr <= end; pixel_addr++) {
+                const color256 =
+                    (this.pixel_buffer[pixel_addr] & mask) | colorset
+                const color = this.vga256_palette[color256]
 
                 buffer[pixel_addr] =
                     (color & 0xff00) |
@@ -2624,11 +2640,11 @@ export class VGAScreen {
             mask &= 0x3f
             colorset |= (this.color_select << 4) & 0xc0
 
-            for (var pixel_addr = start; pixel_addr <= end; pixel_addr++) {
-                var color16 =
+            for (let pixel_addr = start; pixel_addr <= end; pixel_addr++) {
+                const color16 =
                     this.pixel_buffer[pixel_addr] & this.color_plane_enable
-                var color256 = (this.dac_map[color16] & mask) | colorset
-                var color = this.vga256_palette[color256]
+                const color256 = (this.dac_map[color16] & mask) | colorset
+                const color = this.vga256_palette[color256]
 
                 buffer[pixel_addr] =
                     (color & 0xff00) |
@@ -2681,8 +2697,8 @@ export class VGAScreen {
                     this.vga_memory_size,
                 )
 
-                for (var i = 0; i < buffer.length; i++) {
-                    var color = this.vga256_palette[svga_memory[i]]
+                for (let i = 0; i < buffer.length; i++) {
+                    const color = this.vga256_palette[svga_memory[i]]
                     buffer[i] =
                         (color & 0xff00) |
                         (color << 16) |

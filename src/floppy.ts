@@ -12,7 +12,7 @@
 // - OSDev: Floppy Disk Controller
 //   https://wiki.osdev.org/Floppy_Disk_Controller
 
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { LOG_FLOPPY } from './const.js'
 import { h } from './lib.js'
@@ -81,7 +81,7 @@ const REG_DIR = 0x7 // R,  Digital Input Register (DIR)
 const REG_CCR = 0x7 // W,  Configuration Control Register (CCR)
 
 // Status Register A (SRA) bits
-const SRA_NDRV2 = 0x40 // true: second drive is not connected
+const _SRA_NDRV2 = 0x40 // true: second drive is not connected
 const SRA_INTPEND = 0x80 // true: interrupt pending
 
 // Status Register B (SRB) bits
@@ -97,18 +97,18 @@ const DOR_NRESET = 0x4 // true: normal controller mode, false: reset mode ("not 
 const DOR_DMAEN = 0x8 // true: use DMA
 const DOR_MOTEN0 = 0x10 // true: enable motor of FDD0
 const DOR_MOTEN1 = 0x20 // true: enable motor of FDD1
-const DOR_MOTEN2 = 0x40 // true: enable motor of FDD2
-const DOR_MOTEN3 = 0x80 // true: enable motor of FDD3
+const _DOR_MOTEN2 = 0x40 // true: enable motor of FDD2
+const _DOR_MOTEN3 = 0x80 // true: enable motor of FDD3
 const DOR_SELMASK = 0x01
 
 // Tape Drive Register (TDR) bits
 const TDR_BOOTSEL = 0x4
 
 // Main Status Register (MSR) bits
-const MSR_FDD0 = 0x1 // true: FDD0 is busy in seek mode
-const MSR_FDD1 = 0x2 // true: FDD1 is busy in seek mode
-const MSR_FDD2 = 0x4 // true: FDD2 is busy in seek mode
-const MSR_FDD3 = 0x8 // true: FDD3 is busy in seek mode
+const _MSR_FDD0 = 0x1 // true: FDD0 is busy in seek mode
+const _MSR_FDD1 = 0x2 // true: FDD1 is busy in seek mode
+const _MSR_FDD2 = 0x4 // true: FDD2 is busy in seek mode
+const _MSR_FDD3 = 0x8 // true: FDD3 is busy in seek mode
 const MSR_CMDBUSY = 0x10 // true: FDC busy, Read/Write command in progress, cleared at end of Result phase
 const MSR_NDMA = 0x20 // Non-DMA mode, set in Execution phase of PIO mode read/write commands only.
 const MSR_DIO = 0x40 // Data Input/Output, true: FDC has data for CPU, false: FDC expects data from CPU
@@ -126,7 +126,7 @@ const DIR_DOOR = 0x80 // true: No disk or disk changed since last command
 const SR0_DS0 = 0x1 // Drive select 0..3 lower bit
 const SR0_DS1 = 0x2 // Drive select 0..3 upper bit
 const SR0_HEAD = 0x4 // true: Use 2nd head
-const SR0_EQPMT = 0x10 // (?)
+const _SR0_EQPMT = 0x10 // (?)
 const SR0_SEEK = 0x20 // (?)
 const SR0_ABNTERM = 0x40 // true: Command failed
 const SR0_INVCMD = 0x80 // true: Unknown/unimplemented command code
@@ -138,8 +138,8 @@ const SR1_NW = 0x2 // true: Not writable error
 const SR1_EC = 0x80 // true: End of cylinder error
 
 // Status Register 2 (SR2) bits
-const SR2_SNS = 0x4 // true: Scan not satisfied (?)
-const SR2_SEH = 0x8 // true: Scan equal hit (?)
+const _SR2_SNS = 0x4 // true: Scan not satisfied (?)
+const _SR2_SEH = 0x8 // true: Scan equal hit (?)
 
 /**
  * FDC command codes
@@ -187,9 +187,9 @@ const CMD_PHASE_EXECUTION = 2
 const CMD_PHASE_RESULT = 3
 
 // FDC config bits
-const CONFIG_PRETRK = 0xff // Pre-compensation set to track 0
-const CONFIG_FIFOTHR = 0x0f // FIFO threshold set to 1 byte
-const CONFIG_POLL = 0x10 // Poll enabled
+const _CONFIG_PRETRK = 0xff // Pre-compensation set to track 0
+const _CONFIG_FIFOTHR = 0x0f // FIFO threshold set to 1 byte
+const _CONFIG_POLL = 0x10 // Poll enabled
 const CONFIG_EFIFO = 0x20 // FIFO disabled
 const CONFIG_EIS = 0x40 // No implied seeks
 

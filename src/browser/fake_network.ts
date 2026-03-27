@@ -435,7 +435,7 @@ function handle_fake_tcp(
             delete adapter.tcp_conn[tuple]
         }
 
-        let conn = new TCPConnection(adapter)
+        const conn = new TCPConnection(adapter)
         conn.state = TCP_STATE_SYN_RECEIVED
         conn.tuple = tuple
         conn.last = packet
@@ -459,7 +459,7 @@ function handle_fake_tcp(
         dbg_log(`I dont know about ${tuple}, so resetting`, LOG_FETCH)
         let bop = packet.tcp!.ackn
         if (packet.tcp!.fin || packet.tcp!.syn) bop += 1
-        let reply: PacketSpec = {
+        const reply: PacketSpec = {
             eth: {
                 ethertype: ETHERTYPE_IPV4,
                 src: adapter.router_mac,
@@ -492,7 +492,7 @@ function handle_fake_dns_static(
     packet: PacketSpec,
     adapter: NetworkAdapterLike,
 ): boolean {
-    let reply: PacketSpec = {
+    const reply: PacketSpec = {
         eth: {
             ethertype: ETHERTYPE_IPV4,
             src: adapter.router_mac,
@@ -506,13 +506,13 @@ function handle_fake_dns_static(
         udp: { sport: 53, dport: packet.udp!.sport },
     }
 
-    let answers: DnsAnswer[] = []
+    const answers: DnsAnswer[] = []
     let flags = 0x8000 //Response,
     flags |= 0x0180 // Recursion
     // flags |= 0x0400; Authoritative
 
     for (let i = 0; i < packet.dns!.questions.length; ++i) {
-        let q = packet.dns!.questions[i]
+        const q = packet.dns!.questions[i]
 
         switch (q.type) {
             case 1: // A record
@@ -587,11 +587,11 @@ function handle_fake_ntp(
     packet: PacketSpec,
     adapter: NetworkAdapterLike,
 ): boolean {
-    let now = Date.now() // - 1000 * 60 * 60 * 24 * 7;
-    let now_n = now + NTP_EPOC_DIFF
-    let now_n_f = TWO_TO_32 * ((now_n % 1000) / 1000)
+    const now = Date.now() // - 1000 * 60 * 60 * 24 * 7;
+    const now_n = now + NTP_EPOC_DIFF
+    const now_n_f = TWO_TO_32 * ((now_n % 1000) / 1000)
 
-    let reply: PacketSpec = {
+    const reply: PacketSpec = {
         eth: {
             ethertype: ETHERTYPE_IPV4,
             src: adapter.router_mac,
@@ -604,7 +604,7 @@ function handle_fake_ntp(
         },
         udp: { sport: 123, dport: packet.udp!.sport },
     }
-    let flags = (0 << 6) | (4 << 3) | 4
+    const flags = (0 << 6) | (4 << 3) | 4
     reply.ntp = Object.assign({}, packet.ntp!)
     reply.ntp.flags = flags
     reply.ntp.poll = 10
@@ -626,7 +626,7 @@ function handle_fake_dhcp(
     packet: PacketSpec,
     adapter: NetworkAdapterLike,
 ): void {
-    let reply: PacketSpec = {
+    const reply: PacketSpec = {
         eth: {
             ethertype: ETHERTYPE_IPV4,
             src: adapter.router_mac,
@@ -655,10 +655,10 @@ function handle_fake_dhcp(
         options: [],
     }
 
-    let options: Uint8Array[] = []
+    const options: Uint8Array[] = []
 
     // idk, it seems like op should be 3, but udhcpc sends 1
-    let fix = packet.dhcp!.options.find(function (x: Uint8Array) {
+    const fix = packet.dhcp!.options.find(function (x: Uint8Array) {
         return x[0] === 53
     })
     if (fix && fix[2] === 3) packet.dhcp!.op = 3
@@ -674,7 +674,7 @@ function handle_fake_dhcp(
         options.push(new Uint8Array([51, 4, 8, 0, 0, 0])) // Lease Time
     }
 
-    let router_ip: number[] = [
+    const router_ip: number[] = [
         adapter.router_ip[0],
         adapter.router_ip[1],
         adapter.router_ip[2],
@@ -697,7 +697,7 @@ export function handle_fake_networking(
     data: Uint8Array,
     adapter: NetworkAdapterLike,
 ): void {
-    let packet: PacketSpec = {
+    const packet: PacketSpec = {
         eth: { ethertype: 0, src: new Uint8Array(6), dest: new Uint8Array(6) },
     }
     parse_eth(data, packet)
@@ -728,10 +728,10 @@ export function handle_fake_networking(
 }
 
 function parse_eth(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
 
-    let ethertype = view.getUint16(12)
-    let eth: EthHeader = {
+    const ethertype = view.getUint16(12)
+    const eth: EthHeader = {
         ethertype: ethertype,
         dest: data.subarray(0, 6),
         dest_s: a2ethaddr(data.subarray(0, 6)),
@@ -742,7 +742,7 @@ function parse_eth(data: Uint8Array, o: PacketSpec): void {
     o.eth = eth
 
     // TODO: Remove CRC from the end of the packet maybe?
-    let payload = data.subarray(ETH_HEADER_SIZE, data.length)
+    const payload = data.subarray(ETH_HEADER_SIZE, data.length)
 
     if (ethertype === ETHERTYPE_IPV4) {
         parse_ipv4(payload, o)
@@ -770,9 +770,9 @@ function write_eth(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_arp(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
 
-    let arp: ArpHeader = {
+    const arp: ArpHeader = {
         htype: view.getUint16(0),
         ptype: view.getUint16(2),
         oper: view.getUint16(6),
@@ -799,19 +799,19 @@ function write_arp(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_ipv4(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
 
-    let version = (data[0] >> 4) & 0x0f
-    let ihl = data[0] & 0x0f
+    const version = (data[0] >> 4) & 0x0f
+    const ihl = data[0] & 0x0f
 
-    let tos = view.getUint8(1)
-    let len = view.getUint16(2)
+    const tos = view.getUint8(1)
+    const len = view.getUint16(2)
 
-    let ttl = view.getUint8(8)
-    let proto = view.getUint8(9)
-    let ip_checksum = view.getUint16(10)
+    const ttl = view.getUint8(8)
+    const proto = view.getUint8(9)
+    const ip_checksum = view.getUint16(10)
 
-    let ipv4: Ipv4Header = {
+    const ipv4: Ipv4Header = {
         version,
         ihl,
         tos,
@@ -829,7 +829,7 @@ function parse_ipv4(data: Uint8Array, o: PacketSpec): void {
     }
 
     o.ipv4 = ipv4
-    let ipdata = data.subarray(ihl * 4, len)
+    const ipdata = data.subarray(ihl * 4, len)
     if (proto === IPV4_PROTO_ICMP) {
         parse_icmp(ipdata, o)
     } else if (proto === IPV4_PROTO_TCP) {
@@ -868,8 +868,8 @@ function write_ipv4(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_icmp(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
-    let icmp: IcmpHeader = {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const icmp: IcmpHeader = {
         type: view.getUint8(0),
         code: view.getUint8(1),
         checksum: view.getUint16(2),
@@ -895,8 +895,8 @@ function write_icmp(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_udp(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
-    let udp: UdpHeader = {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const udp: UdpHeader = {
         sport: view.getUint16(0),
         dport: view.getUint16(2),
         len: view.getUint16(4),
@@ -955,20 +955,20 @@ function write_udp(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_dns(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
-    let dns: DnsHeader = {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const dns: DnsHeader = {
         id: view.getUint16(0),
         flags: view.getUint16(2),
         questions: [],
         answers: [],
     }
 
-    let qdcount = view.getUint16(4)
-    let ancount = view.getUint16(6)
+    const qdcount = view.getUint16(4)
+    const ancount = view.getUint16(6)
 
     let offset = 12
     function read_dstr(): string[] {
-        let o: string[] = []
+        const o: string[] = []
         let len: number
         do {
             len = view.getUint8(offset)
@@ -991,7 +991,7 @@ function parse_dns(data: Uint8Array, o: PacketSpec): void {
         offset += 4
     }
     for (let i = 0; i < ancount; i++) {
-        let ans: DnsAnswer = {
+        const ans: DnsAnswer = {
             name: read_dstr(),
             type: view.getInt16(offset),
             class: view.getUint16(offset + 2),
@@ -999,7 +999,7 @@ function parse_dns(data: Uint8Array, o: PacketSpec): void {
             data: new Uint8Array(0),
         }
         offset += 8
-        let rdlen = view.getUint16(offset)
+        const rdlen = view.getUint16(offset)
         offset += 2
         ans.data = data.subarray(offset, offset + rdlen)
         offset += rdlen
@@ -1017,8 +1017,8 @@ function write_dns(spec: PacketSpec, out: EthEncoderBuf): number {
 
     let offset = 12
     for (let i = 0; i < spec.dns!.questions.length; ++i) {
-        let q = spec.dns!.questions[i]
-        for (let s of q.name) {
+        const q = spec.dns!.questions[i]
+        for (const s of q.name) {
             const n_written = view_set_string(offset + 1, s, view, out)
             view.setUint8(offset, n_written)
             offset += 1 + n_written
@@ -1030,7 +1030,7 @@ function write_dns(spec: PacketSpec, out: EthEncoderBuf): number {
     }
 
     function write_reply(a: DnsAnswer): void {
-        for (let s of a.name) {
+        for (const s of a.name) {
             const n_written = view_set_string(offset + 1, s, view, out)
             view.setUint8(offset, n_written)
             offset += 1 + n_written
@@ -1047,7 +1047,7 @@ function write_dns(spec: PacketSpec, out: EthEncoderBuf): number {
     }
 
     for (let i = 0; i < spec.dns!.answers.length; ++i) {
-        let a = spec.dns!.answers[i]
+        const a = spec.dns!.answers[i]
         write_reply(a)
     }
 
@@ -1055,8 +1055,8 @@ function write_dns(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_dhcp(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
-    let dhcp: DhcpHeader = {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const dhcp: DhcpHeader = {
         op: view.getUint8(0),
         htype: view.getUint8(1),
         hlen: view.getUint8(2),
@@ -1073,13 +1073,13 @@ function parse_dhcp(data: Uint8Array, o: PacketSpec): void {
         options: [],
     }
 
-    let options = data.subarray(240)
+    const options = data.subarray(240)
     for (let i = 0; i < options.length; ++i) {
-        let start = i
-        let op = options[i]
+        const start = i
+        const op = options[i]
         if (op === 0) continue
         ++i
-        let len = options[i]
+        const len = options[i]
         i += len
         dhcp.options.push(options.subarray(start, start + len + 2))
     }
@@ -1106,14 +1106,14 @@ function write_dhcp(spec: PacketSpec, out: EthEncoderBuf): number {
     view.setUint32(236, DHCP_MAGIC_COOKIE)
 
     let offset = 240
-    for (let o of spec.dhcp!.options) {
+    for (const o of spec.dhcp!.options) {
         offset += view_set_array(offset, o, view, out)
     }
     return offset
 }
 
 function parse_ntp(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
     o.ntp = {
         flags: view.getUint8(0),
         stratum: view.getUint8(1),
@@ -1154,9 +1154,9 @@ function write_ntp(spec: PacketSpec, out: EthEncoderBuf): number {
 }
 
 function parse_tcp(data: Uint8Array, o: PacketSpec): void {
-    let view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
 
-    let tcp: TcpHeader = {
+    const tcp: TcpHeader = {
         sport: view.getUint16(0),
         dport: view.getUint16(2),
         seq: view.getUint32(4),
@@ -1167,7 +1167,7 @@ function parse_tcp(data: Uint8Array, o: PacketSpec): void {
         urgent: view.getUint16(18),
     }
 
-    let flags = view.getUint8(13)
+    const flags = view.getUint8(13)
 
     tcp.fin = !!(flags & 0x01)
     tcp.syn = !!(flags & 0x02)
@@ -1180,14 +1180,14 @@ function parse_tcp(data: Uint8Array, o: PacketSpec): void {
 
     o.tcp = tcp
 
-    let offset = tcp.doff! * 4
+    const offset = tcp.doff! * 4
     o.tcp_data = data.subarray(offset)
 }
 
 function write_tcp(spec: PacketSpec, out: EthEncoderBuf): number {
     const view = out.ipv4_payload_view
     let flags = 0
-    let tcp = spec.tcp!
+    const tcp = spec.tcp!
 
     if (tcp.fin) flags |= 0x01
     if (tcp.syn) flags |= 0x02
@@ -1268,7 +1268,7 @@ export function fake_tcp_connect(
         )
     }
 
-    let conn = new TCPConnection(adapter)
+    const conn = new TCPConnection(adapter)
 
     conn.tuple = tuple
     conn.hsrc = adapter.router_mac
@@ -1287,7 +1287,7 @@ export function fake_tcp_probe(
     adapter: NetworkAdapterLike,
 ): Promise<boolean> {
     return new Promise((res, _rej) => {
-        let handle = fake_tcp_connect(dport, adapter)
+        const handle = fake_tcp_connect(dport, adapter)
         handle.state = TCP_STATE_SYN_PROBE
         handle.on('probe', res)
     })
@@ -1302,7 +1302,7 @@ export class TCPConnection {
     in_active_close: boolean
     delayed_send_fin: boolean
     delayed_state: string | undefined
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     events_handlers: Record<string, (...args: any[]) => void>
     tuple: string = ''
     last: PacketSpec | undefined = undefined
@@ -1319,7 +1319,7 @@ export class TCPConnection {
     last_received_ackn: number | undefined = undefined
     pending: boolean = false
     name: string = ''
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     read: any = undefined
     stream_id: number = 0
     on_close: () => void = () => {
@@ -1344,19 +1344,17 @@ export class TCPConnection {
         this.events_handlers = {}
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     on(event: string, handler: (...args: any[]) => void): void {
         this.events_handlers[event] = handler
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emit(event: string, ...args: any[]): void {
         if (!this.events_handlers[event]) return
         this.events_handlers[event].apply(this, args)
     }
 
     ipv4_reply(): PacketSpec {
-        let reply: PacketSpec = {
+        const reply: PacketSpec = {
             eth: {
                 ethertype: ETHERTYPE_IPV4,
                 src: this.hsrc,
@@ -1391,7 +1389,6 @@ export class TCPConnection {
             seq: this.seq,
         }
         for (const opt in tcp_options) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ;(reply_tcp as Record<string, any>)[opt] = (
                 tcp_options as Record<string, any>
             )[opt]
@@ -1411,7 +1408,7 @@ export class TCPConnection {
             this.state = TCP_STATE_SYN_SENT
         }
 
-        let reply = this.ipv4_reply()
+        const reply = this.ipv4_reply()
         reply.ipv4!.id = 2345
         reply.tcp = {
             sport: this.sport,
@@ -1432,7 +1429,7 @@ export class TCPConnection {
         this.start_seq = packet.tcp!.seq
         this.winsize = packet.tcp!.winsize
 
-        let reply = this.ipv4_reply()
+        const reply = this.ipv4_reply()
         reply.tcp = {
             sport: this.sport,
             dport: this.dport,
@@ -1690,8 +1687,8 @@ export class TCPConnection {
 }
 
 function arp_whohas(packet: PacketSpec, adapter: NetworkAdapterLike): void {
-    let packet_subnet = iptolong(packet.arp!.tpa) & 0xffffff00
-    let router_subnet = iptolong(adapter.router_ip) & 0xffffff00
+    const packet_subnet = iptolong(packet.arp!.tpa) & 0xffffff00
+    const router_subnet = iptolong(adapter.router_ip) & 0xffffff00
 
     if (!adapter.masquerade) {
         if (packet_subnet !== router_subnet) {
@@ -1705,7 +1702,7 @@ function arp_whohas(packet: PacketSpec, adapter: NetworkAdapterLike): void {
     }
 
     // Reply to ARP Whohas
-    let reply: PacketSpec = {
+    const reply: PacketSpec = {
         eth: {
             ethertype: ETHERTYPE_ARP,
             src: adapter.router_mac,
@@ -1728,7 +1725,7 @@ function handle_fake_ping(
     packet: PacketSpec,
     adapter: NetworkAdapterLike,
 ): void {
-    let reply: PacketSpec = {
+    const reply: PacketSpec = {
         eth: {
             ethertype: ETHERTYPE_IPV4,
             src: adapter.router_mac,
@@ -1753,7 +1750,7 @@ function handle_udp_echo(
     adapter: NetworkAdapterLike,
 ): void {
     // UDP Echo Server
-    let reply: PacketSpec = {
+    const reply: PacketSpec = {
         eth: {
             ethertype: ETHERTYPE_IPV4,
             src: adapter.router_mac,

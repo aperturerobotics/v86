@@ -1,4 +1,4 @@
-import { dbg_assert, dbg_log } from '../log.js'
+import { dbg_assert } from '../log.js'
 import { BusConnector } from '../bus.js'
 
 class TextAreaAdapter {
@@ -23,13 +23,13 @@ class TextAreaAdapter {
                 return
             }
 
-            var chr = e.which
+            const chr = e.which
             this.send_char(chr)
             e.preventDefault()
         }
 
         this.keydown_handler = (e: KeyboardEvent) => {
-            var chr = e.which
+            const chr = e.which
 
             if (chr === 8) {
                 this.send_char(127)
@@ -45,9 +45,9 @@ class TextAreaAdapter {
                 return
             }
 
-            var data = e.clipboardData?.getData('text/plain') || ''
+            const data = e.clipboardData?.getData('text/plain') || ''
 
-            for (var i = 0; i < data.length; i++) {
+            for (let i = 0; i < data.length; i++) {
                 this.send_char(data.charCodeAt(i))
             }
 
@@ -109,14 +109,14 @@ class TextAreaAdapter {
     }
 
     update(): void {
-        var now = Date.now()
-        var delta = now - this.last_update
+        const now = Date.now()
+        const delta = now - this.last_update
 
         if (delta < 16) {
             if (this.update_timer === undefined) {
                 this.update_timer = setTimeout(() => {
                     this.update_timer = undefined
-                    var now = Date.now()
+                    const now = Date.now()
                     dbg_assert(now - this.last_update >= 15)
                     this.last_update = now
                     this.render()
@@ -165,7 +165,7 @@ export class SerialAdapter extends TextAreaAdapter {
         bus.register(
             'serial0-output-byte',
             function (this: SerialAdapter, byte: number) {
-                var chr = String.fromCharCode(byte)
+                const chr = String.fromCharCode(byte)
                 this.show_char(chr)
             },
             this,
@@ -201,14 +201,14 @@ export class VirtioConsoleAdapter extends TextAreaAdapter {
     }
 }
 
-class SerialRecordingAdapter {
+class _SerialRecordingAdapter {
     text = ''
 
     constructor(bus: BusConnector) {
         bus.register(
             'serial0-output-byte',
-            function (this: SerialRecordingAdapter, byte: number) {
-                var chr = String.fromCharCode(byte)
+            function (this: _SerialRecordingAdapter, byte: number) {
+                const chr = String.fromCharCode(byte)
                 this.text += chr
             },
             this,
@@ -216,22 +216,20 @@ class SerialRecordingAdapter {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface XtermTerminal {
     open(element: HTMLElement): void
     write(data: Uint8Array): void
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     onData(callback: (data: string) => void): any
     dispose(): void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type XtermConstructor = new (options: any) => XtermTerminal
 
 class XtermJSAdapter {
     element: HTMLElement
     term: XtermTerminal
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     on_data_disposable: any
 
     constructor(element: HTMLElement, xterm_lib: XtermConstructor) {
@@ -244,12 +242,16 @@ class XtermJSAdapter {
     }
 
     destroy(): void {
-        this.on_data_disposable && this.on_data_disposable.dispose()
+        if (this.on_data_disposable) {
+            this.on_data_disposable.dispose()
+        }
         this.term.dispose()
     }
 
     show(): void {
-        this.term && this.term.open(this.element)
+        if (this.term) {
+            this.term.open(this.element)
+        }
     }
 }
 

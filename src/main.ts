@@ -6,10 +6,9 @@ import { BusConnector } from './bus.js'
 
 // CPU is a constructor function (not a TS class), so it lacks a construct
 // signature. We alias it through an untyped binding to call with `new`.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const CPUConstructor: any = CPU
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CPUInstance = any
 
 function the_worker() {
@@ -25,7 +24,6 @@ function the_worker() {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class v86 {
     running: boolean = false
     stopping: boolean = false
@@ -37,10 +35,11 @@ export class v86 {
 
     static microtick: () => number
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     constructor(bus: BusConnector, wasm: any) {
         this.cpu = new CPUConstructor(bus, wasm, () => {
-            this.idle && this.next_tick(0)
+            if (this.idle) {
+                this.next_tick(0)
+            }
         })
         this.bus = bus
         this.register_yield()
@@ -97,7 +96,6 @@ export class v86 {
         this.cpu.load_bios()
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     init(settings: any): void {
         this.cpu.init(settings, this.bus)
         this.bus.send('emulator-ready')
@@ -107,12 +105,11 @@ export class v86 {
         return save_state(this.cpu)
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     restore_state(state: any): void {
         return restore_state(this.cpu, state)
     }
 
-    yield(t: number, tick: number): void {
+    yield(t: number, _tick: number): void {
         // Default fallback: setTimeout
         setTimeout(() => {
             this.do_tick()
@@ -128,7 +125,6 @@ export class v86 {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _global: any = globalThis
 
 // Environment-specific yield strategy overrides
@@ -179,7 +175,9 @@ if (typeof process !== 'undefined') {
     }
 
     v86.prototype.unregister_yield = function (): void {
-        this.worker && this.worker.terminate()
+        if (this.worker) {
+            this.worker.terminate()
+        }
         this.worker = null
     }
 }
@@ -188,7 +186,7 @@ if (typeof process !== 'undefined') {
 if (typeof performance === 'object' && performance.now) {
     v86.microtick = performance.now.bind(performance)
 } else if (typeof require === 'function') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { performance } = require('perf_hooks')
     v86.microtick = performance.now.bind(performance)
 } else if (typeof process === 'object' && process.hrtime) {

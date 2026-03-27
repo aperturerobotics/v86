@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { v86 } from '../main.js'
 import { LOG_CPU, WASM_TABLE_OFFSET, WASM_TABLE_SIZE } from '../const.js'
@@ -11,8 +11,6 @@ import {
     BOOT_ORDER_HD_FIRST,
     BOOT_ORDER_CD_FIRST,
 } from '../rtc.js'
-import { EEXIST, ENOENT } from '../../lib/9p.js'
-
 import { SpeakerAdapter } from './speaker.js'
 import { NetworkAdapter } from './network.js'
 import { FetchNetworkAdapter } from './fetch_network.js'
@@ -37,32 +35,21 @@ import {
 import { SyncBuffer, buffer_from_object } from '../buffer.js'
 import { FS } from '../../lib/filesystem.js'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type WasmExports = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type EmulatorSettings = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type V86Options = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type FileDescriptor = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type AutoStep = any
 
-class FileExistsError {
-    message: string
+class FileNotFoundError extends Error {
     constructor(message?: string) {
-        this.message = message || 'File already exists'
+        super(message || 'File not found')
     }
 }
-FileExistsError.prototype = Error.prototype
-
-class FileNotFoundError {
-    message: string
-    constructor(message?: string) {
-        this.message = message || 'File not found'
-    }
-}
-FileNotFoundError.prototype = Error.prototype
 
 /**
  * Constructor for emulator instances.
@@ -71,37 +58,36 @@ FileNotFoundError.prototype = Error.prototype
  */
 export class V86 {
     cpu_is_running = false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     cpu_exception_hook: (n: number) => void = function (_n: number) {}
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     bus: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emulator_bus: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     v86: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     wasm_source: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     zstd_worker: Worker | null = null
     zstd_worker_request_id = 0
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     zstd_context: any = null
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     keyboard_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     mouse_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     screen_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     network_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     serial_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     speaker_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     virtio_console_adapter: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     fs9p: any
 
     constructor(options: V86Options) {
@@ -117,9 +103,8 @@ export class V86 {
         this.bus = bus[0]
         this.emulator_bus = bus[1]
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let cpu: any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         let wasm_memory: any
 
         const wasm_table = new WebAssembly.Table({
@@ -129,7 +114,7 @@ export class V86 {
 
         const wasm_shared_funcs = {
             cpu_exception_hook: (n: number) => this.cpu_exception_hook(n),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             run_hardware_timers: function (a: any, t: any) {
                 return cpu.run_hardware_timers(a, t)
             },
@@ -235,10 +220,7 @@ export class V86 {
         let wasm_fn = options.wasm_fn
 
         if (!wasm_fn) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             wasm_fn = (env: any) => {
-                /* global __dirname */
-
                 return new Promise((resolve) => {
                     let v86_bin = DEBUG ? 'v86-debug.wasm' : 'v86.wasm'
                     let v86_bin_fallback = 'v86-fallback.wasm'
@@ -249,28 +231,25 @@ export class V86 {
                             'v86.wasm',
                             'v86-fallback.wasm',
                         )
-                    } else if (
-                        typeof window === 'undefined' &&
-                        typeof __dirname === 'string'
-                    ) {
-                        v86_bin = __dirname + '/' + v86_bin
-                        v86_bin_fallback = __dirname + '/' + v86_bin_fallback
+                    } else if (typeof window === 'undefined') {
+                        // Node/Bun: resolve WASM relative to project root build/
+                        const root = new URL('../../', import.meta.url).pathname
+                        v86_bin = root + 'build/' + v86_bin
+                        v86_bin_fallback = root + 'build/' + v86_bin_fallback
                     } else {
                         v86_bin = 'build/' + v86_bin
                         v86_bin_fallback = 'build/' + v86_bin_fallback
                     }
 
                     load_file(v86_bin, {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         done: async (bytes: any) => {
                             try {
                                 const { instance } =
                                     await WebAssembly.instantiate(bytes, env)
                                 this.wasm_source = bytes
                                 resolve(instance.exports)
-                            } catch (_err) {
+                            } catch {
                                 load_file(v86_bin_fallback, {
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     done: async (bytes: any) => {
                                         const { instance } =
                                             await WebAssembly.instantiate(
@@ -283,7 +262,7 @@ export class V86 {
                                 })
                             }
                         },
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
                         progress: (e: any) => {
                             this.emulator_bus.send('download-progress', {
                                 file_index: 0,
@@ -314,7 +293,6 @@ export class V86 {
         })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private async continue_init(
         emulator: any,
         options: V86Options,
@@ -442,7 +420,6 @@ export class V86 {
 
         if (settings.serial_console?.type === 'xtermjs') {
             const xterm_lib =
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 settings.serial_console.xterm_lib || (window as any)['Terminal']
             this.serial_adapter = new SerialAdapterXtermJS(
                 settings.serial_console.container,
@@ -465,7 +442,6 @@ export class V86 {
 
         if (virtio_console_settings?.type === 'xtermjs') {
             const xterm_lib =
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 virtio_console_settings.xterm_lib || (window as any)['Terminal']
             this.virtio_console_adapter = new VirtioConsoleAdapterXtermJS(
                 virtio_console_settings.container,
@@ -484,7 +460,7 @@ export class V86 {
         }
 
         // ugly, but required for closure compiler compilation
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         function put_on_settings(name: string, buffer: any) {
             switch (name) {
                 case 'hda':
@@ -530,10 +506,8 @@ export class V86 {
             }
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        var files_to_load: any[] = []
+        const files_to_load: any[] = []
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const add_file = (name: string, file: any) => {
             if (!file) {
                 return
@@ -605,8 +579,8 @@ export class V86 {
         } else if (options.filesystem && options.filesystem.proxy_url) {
             settings.proxy9p = options.filesystem.proxy_url
         } else if (options.filesystem) {
-            var fs_url = options.filesystem.basefs
-            var base_url = options.filesystem.baseurl
+            let fs_url = options.filesystem.basefs
+            const base_url = options.filesystem.baseurl
 
             let file_storage: FileStorageInterface = new MemoryFileStorage()
 
@@ -622,7 +596,7 @@ export class V86 {
             if (fs_url) {
                 dbg_assert(base_url, 'Filesystem: baseurl must be specified')
 
-                var size: number | undefined
+                let size: number | undefined
 
                 if (typeof fs_url === 'object') {
                     size = fs_url.size
@@ -639,8 +613,7 @@ export class V86 {
             }
         }
 
-        var starter = this
-        var total = files_to_load.length
+        const total = files_to_load.length
 
         const cont = (index: number) => {
             if (index === total) {
@@ -648,7 +621,7 @@ export class V86 {
                 return
             }
 
-            var f = files_to_load[index]
+            const f = files_to_load[index]
 
             if (f.loadable) {
                 f.loadable.onload = () => {
@@ -658,7 +631,6 @@ export class V86 {
                 f.loadable.load()
             } else {
                 load_file(f.url, {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     done: (result: any) => {
                         if (
                             f.url.endsWith('.zst') &&
@@ -680,10 +652,10 @@ export class V86 {
                         )
                         cont(index + 1)
                     },
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    progress: function progress(e: any) {
+
+                    progress: (e: any) => {
                         if (e.target.status === 200) {
-                            starter.emulator_bus.send('download-progress', {
+                            this.emulator_bus.send('download-progress', {
                                 file_index: index,
                                 file_count: total,
                                 file_name: f.url,
@@ -693,7 +665,7 @@ export class V86 {
                                 loaded: e.loaded,
                             })
                         } else {
-                            starter.emulator_bus.send('download-error', {
+                            this.emulator_bus.send('download-error', {
                                 file_index: index,
                                 file_count: total,
                                 file_name: f.url,
@@ -754,12 +726,15 @@ export class V86 {
                 )
             }
 
-            this.serial_adapter &&
-                this.serial_adapter.show &&
+            if (this.serial_adapter && this.serial_adapter.show) {
                 this.serial_adapter.show()
-            this.virtio_console_adapter &&
-                this.virtio_console_adapter.show &&
+            }
+            if (
+                this.virtio_console_adapter &&
+                this.virtio_console_adapter.show
+            ) {
                 this.virtio_console_adapter.show()
+            }
 
             this.v86.init(settings)
 
@@ -816,13 +791,10 @@ export class V86 {
     ): Promise<ArrayBuffer> {
         if (!this.zstd_worker) {
             function the_worker() {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 let wasm: any
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 globalThis.onmessage = function (e: any) {
                     if (!wasm) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const env: Record<string, any> = Object.fromEntries(
                             [
                                 'cpu_exception_hook',
@@ -936,7 +908,6 @@ export class V86 {
         })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_bzimage_initrd_from_filesystem(filesystem: any): {
         initrd_path: string | undefined
         bzimage_path: string | undefined
@@ -1008,13 +979,27 @@ export class V86 {
         await this.stop()
 
         this.v86.destroy()
-        this.keyboard_adapter && this.keyboard_adapter.destroy()
-        this.network_adapter && this.network_adapter.destroy()
-        this.mouse_adapter && this.mouse_adapter.destroy()
-        this.screen_adapter && this.screen_adapter.destroy()
-        this.serial_adapter && this.serial_adapter.destroy()
-        this.speaker_adapter && this.speaker_adapter.destroy()
-        this.virtio_console_adapter && this.virtio_console_adapter.destroy()
+        if (this.keyboard_adapter) {
+            this.keyboard_adapter.destroy()
+        }
+        if (this.network_adapter) {
+            this.network_adapter.destroy()
+        }
+        if (this.mouse_adapter) {
+            this.mouse_adapter.destroy()
+        }
+        if (this.screen_adapter) {
+            this.screen_adapter.destroy()
+        }
+        if (this.serial_adapter) {
+            this.serial_adapter.destroy()
+        }
+        if (this.speaker_adapter) {
+            this.speaker_adapter.destroy()
+        }
+        if (this.virtio_console_adapter) {
+            this.virtio_console_adapter.destroy()
+        }
     }
 
     /**
@@ -1029,14 +1014,14 @@ export class V86 {
      *
      * The callback function gets a single argument which depends on the event.
      */
-    add_listener(event: string, listener: Function): void {
+    add_listener(event: string, listener: (...args: any[]) => any): void {
         this.bus.register(event, listener, this)
     }
 
     /**
      * Remove an event listener.
      */
-    remove_listener(event: string, listener: Function): void {
+    remove_listener(event: string, listener: (...args: any[]) => any): void {
         this.bus.unregister(event, listener)
     }
 
@@ -1092,7 +1077,6 @@ export class V86 {
         if (file.url && !file.async) {
             await new Promise<void>((resolve) => {
                 load_file(file.url, {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     done: (result: any) => {
                         fda.insert_disk(new SyncBuffer(result))
                         resolve()
@@ -1104,11 +1088,11 @@ export class V86 {
                 file,
                 this.zstd_decompress_worker.bind(this),
             )
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             ;(image as any).onload = () => {
                 fda.insert_disk(image)
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             await (image as any).load()
         }
     }
@@ -1121,7 +1105,6 @@ export class V86 {
         if (file.url && !file.async) {
             await new Promise<void>((resolve) => {
                 load_file(file.url, {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     done: (result: any) => {
                         fdb.insert_disk(new SyncBuffer(result))
                         resolve()
@@ -1133,11 +1116,11 @@ export class V86 {
                 file,
                 this.zstd_decompress_worker.bind(this),
             )
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             ;(image as any).onload = () => {
                 fdb.insert_disk(image)
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             await (image as any).load()
         }
     }
@@ -1177,7 +1160,6 @@ export class V86 {
     async set_cdrom(file: FileDescriptor): Promise<void> {
         if (file.url && !file.async) {
             load_file(file.url, {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 done: (result: any) => {
                     this.v86.cpu.devices.cdrom.set_cdrom(new SyncBuffer(result))
                 },
@@ -1187,11 +1169,11 @@ export class V86 {
                 file,
                 this.zstd_decompress_worker.bind(this),
             )
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             ;(image as any).onload = () => {
                 this.v86.cpu.devices.cdrom.set_cdrom(image)
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             await (image as any).load()
         }
     }
@@ -1212,7 +1194,7 @@ export class V86 {
         codes: number[],
         delay?: number,
     ): Promise<void> {
-        for (var i = 0; i < codes.length; i++) {
+        for (let i = 0; i < codes.length; i++) {
             this.bus.send('keyboard-code', codes[i])
             if (delay)
                 await new Promise((resolve) => setTimeout(resolve, delay))
@@ -1223,7 +1205,7 @@ export class V86 {
      * Send translated keys.
      */
     async keyboard_send_keys(codes: number[], delay?: number): Promise<void> {
-        for (var i = 0; i < codes.length; i++) {
+        for (let i = 0; i < codes.length; i++) {
             this.keyboard_adapter.simulate_press(codes[i])
             if (delay)
                 await new Promise((resolve) => setTimeout(resolve, delay))
@@ -1234,7 +1216,7 @@ export class V86 {
      * Send text, assuming the guest OS uses a US keyboard layout.
      */
     async keyboard_send_text(string: string, delay?: number): Promise<void> {
-        for (var i = 0; i < string.length; i++) {
+        for (let i = 0; i < string.length; i++) {
             this.keyboard_adapter.simulate_char(string[i])
             if (delay)
                 await new Promise((resolve) => setTimeout(resolve, delay))
@@ -1268,15 +1250,15 @@ export class V86 {
             return
         }
 
-        var elem = document.getElementById('screen_container')
+        const elem = document.getElementById('screen_container')
 
         if (!elem) {
             return
         }
 
         // bracket notation because otherwise they get renamed by closure compiler
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        var fn =
+
+        const fn =
             (elem as any)['requestFullScreen'] ||
             (elem as any)['webkitRequestFullscreen'] ||
             (elem as any)['mozRequestFullScreen'] ||
@@ -1287,16 +1269,19 @@ export class V86 {
 
             // This is necessary, because otherwise chromium keyboard doesn't work anymore.
             // Might (but doesn't seem to) break something else
-            var focus_element = document.getElementsByClassName(
+            const focus_element = document.getElementsByClassName(
                 'phone_keyboard',
             )[0] as HTMLElement | undefined
-            focus_element && focus_element.focus()
+            if (focus_element) {
+                focus_element.focus()
+            }
         }
 
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ;(navigator as any).keyboard.lock()
-        } catch (_e) {}
+        } catch {
+            // intentionally empty
+        }
 
         this.lock_mouse()
     }
@@ -1312,7 +1297,7 @@ export class V86 {
             await elem.requestPointerLock({
                 unadjustedMovement: true,
             })
-        } catch (_e) {
+        } catch {
             // as per MDN, retry without unadjustedMovement option
             await elem.requestPointerLock()
         }
@@ -1354,7 +1339,7 @@ export class V86 {
      * Send a string to the first emulated serial terminal.
      */
     serial0_send(data: string): void {
-        for (var i = 0; i < data.length; i++) {
+        for (let i = 0; i < data.length; i++) {
             this.bus.send('serial0-input', data.charCodeAt(i))
         }
     }
@@ -1363,7 +1348,7 @@ export class V86 {
      * Send bytes to a serial port (to be received by the emulated PC).
      */
     serial_send_bytes(serial: number, data: Uint8Array): void {
-        for (var i = 0; i < data.length; i++) {
+        for (let i = 0; i < data.length; i++) {
             this.bus.send('serial' + serial + '-input', data[i])
         }
     }
@@ -1409,18 +1394,18 @@ export class V86 {
      */
     async create_file(file: string, data: Uint8Array): Promise<void> {
         dbg_assert(arguments.length === 2)
-        var fs = this.fs9p
+        const fs = this.fs9p
 
         if (!fs) {
             return
         }
 
-        var parts = file.split('/')
-        var filename = parts[parts.length - 1]
+        const parts = file.split('/')
+        const filename = parts[parts.length - 1]
 
-        var path_infos = fs.SearchPath(file)
-        var parent_id = path_infos.parentid
-        var not_found = filename === '' || parent_id === -1
+        const path_infos = fs.SearchPath(file)
+        const parent_id = path_infos.parentid
+        const not_found = filename === '' || parent_id === -1
 
         if (!not_found) {
             await fs.CreateBinaryFile(filename, parent_id, data)
@@ -1435,7 +1420,7 @@ export class V86 {
      */
     async read_file(file: string): Promise<Uint8Array | undefined> {
         dbg_assert(arguments.length === 1)
-        var fs = this.fs9p
+        const fs = this.fs9p
 
         if (!fs) {
             return
@@ -1537,7 +1522,7 @@ export class V86 {
         const match_multi = Array.isArray(expected)
         const timeout_msec = options?.timeout_msec || 0
         const changed_rows = new Set<number>()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const screen_put_char = (args: any) => changed_rows.add(args[0])
         const contains_expected = (
             screen_line: string,
@@ -1617,7 +1602,7 @@ export class V86 {
     /**
      * Reads data from memory at specified offset.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     read_memory(offset: number, length: number): any {
         return this.v86.cpu.read_blob(offset, length)
     }
@@ -1632,14 +1617,14 @@ export class V86 {
     /**
      * Set the serial container to an xterm.js terminal.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     set_serial_container_xtermjs(
         element: HTMLElement,
         xterm_lib: any = (window as any)['Terminal'],
     ): void {
-        this.serial_adapter &&
-            this.serial_adapter.destroy &&
+        if (this.serial_adapter && this.serial_adapter.destroy) {
             this.serial_adapter.destroy()
+        }
         this.serial_adapter = new SerialAdapterXtermJS(
             element,
             this.bus,
@@ -1651,14 +1636,17 @@ export class V86 {
     /**
      * Set the virtio console container to an xterm.js terminal.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     set_virtio_console_container_xtermjs(
         element: HTMLElement,
         xterm_lib: any = (window as any)['Terminal'],
     ): void {
-        this.virtio_console_adapter &&
-            this.virtio_console_adapter.destroy &&
+        if (
+            this.virtio_console_adapter &&
+            this.virtio_console_adapter.destroy
+        ) {
             this.virtio_console_adapter.destroy()
+        }
         this.virtio_console_adapter = new VirtioConsoleAdapterXtermJS(
             element,
             this.bus,
@@ -1672,22 +1660,16 @@ export class V86 {
     }
 }
 
-/* global module, self */
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare var module: any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare var importScripts: any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare var self: any
+declare let module: any
+declare let importScripts: any
+declare let self: any
 
 if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
     module.exports['V86'] = V86
 } else if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any)['V86'] = V86
 } else if (typeof importScripts === 'function') {
     // web worker
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     ;(self as any)['V86'] = V86
 }

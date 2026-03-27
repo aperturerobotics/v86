@@ -40,47 +40,47 @@ export const EOPNOTSUPP = 95 /* Operation is not supported */
 export const ENOTEMPTY = 39 /* Directory not empty */
 export const EPROTO = 71 /* Protocol error */
 
-var P9_SETATTR_MODE = 0x00000001
-var P9_SETATTR_UID = 0x00000002
-var P9_SETATTR_GID = 0x00000004
-var P9_SETATTR_SIZE = 0x00000008
-var P9_SETATTR_ATIME = 0x00000010
-var P9_SETATTR_MTIME = 0x00000020
-var P9_SETATTR_CTIME = 0x00000040
-var P9_SETATTR_ATIME_SET = 0x00000080
-var P9_SETATTR_MTIME_SET = 0x00000100
+const P9_SETATTR_MODE = 0x00000001
+const P9_SETATTR_UID = 0x00000002
+const P9_SETATTR_GID = 0x00000004
+const P9_SETATTR_SIZE = 0x00000008
+const P9_SETATTR_ATIME = 0x00000010
+const P9_SETATTR_MTIME = 0x00000020
+const P9_SETATTR_CTIME = 0x00000040
+const P9_SETATTR_ATIME_SET = 0x00000080
+const P9_SETATTR_MTIME_SET = 0x00000100
 
-var P9_STAT_MODE_DIR = 0x80000000
-var P9_STAT_MODE_APPEND = 0x40000000
-var P9_STAT_MODE_EXCL = 0x20000000
-var P9_STAT_MODE_MOUNT = 0x10000000
-var P9_STAT_MODE_AUTH = 0x08000000
-var P9_STAT_MODE_TMP = 0x04000000
-var P9_STAT_MODE_SYMLINK = 0x02000000
-var P9_STAT_MODE_LINK = 0x01000000
-var P9_STAT_MODE_DEVICE = 0x00800000
-var P9_STAT_MODE_NAMED_PIPE = 0x00200000
-var P9_STAT_MODE_SOCKET = 0x00100000
-var P9_STAT_MODE_SETUID = 0x00080000
-var P9_STAT_MODE_SETGID = 0x00040000
-var P9_STAT_MODE_SETVTX = 0x00010000
+const _P9_STAT_MODE_DIR = 0x80000000
+const _P9_STAT_MODE_APPEND = 0x40000000
+const _P9_STAT_MODE_EXCL = 0x20000000
+const _P9_STAT_MODE_MOUNT = 0x10000000
+const _P9_STAT_MODE_AUTH = 0x08000000
+const _P9_STAT_MODE_TMP = 0x04000000
+const _P9_STAT_MODE_SYMLINK = 0x02000000
+const _P9_STAT_MODE_LINK = 0x01000000
+const _P9_STAT_MODE_DEVICE = 0x00800000
+const _P9_STAT_MODE_NAMED_PIPE = 0x00200000
+const _P9_STAT_MODE_SOCKET = 0x00100000
+const _P9_STAT_MODE_SETUID = 0x00080000
+const _P9_STAT_MODE_SETGID = 0x00040000
+const _P9_STAT_MODE_SETVTX = 0x00010000
 
 export const P9_LOCK_TYPE_RDLCK = 0
 export const P9_LOCK_TYPE_WRLCK = 1
 export const P9_LOCK_TYPE_UNLCK = 2
 const P9_LOCK_TYPES = ['shared', 'exclusive', 'unlock']
 
-const P9_LOCK_FLAGS_BLOCK = 1
-const P9_LOCK_FLAGS_RECLAIM = 2
+const _P9_LOCK_FLAGS_BLOCK = 1
+const _P9_LOCK_FLAGS_RECLAIM = 2
 
 export const P9_LOCK_SUCCESS = 0
 export const P9_LOCK_BLOCKED = 1
 export const P9_LOCK_ERROR = 2
 export const P9_LOCK_GRACE = 3
 
-var FID_NONE = -1
-var FID_INODE = 1
-var FID_XATTR = 2
+const FID_NONE = -1
+const FID_INODE = 1
+const FID_XATTR = 2
 
 interface Fid {
     inodeid: number
@@ -89,7 +89,6 @@ interface Fid {
     dbg_name: string
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type P9Handler = (
     reqbuf: Uint8Array,
     reply: (replybuf: Uint8Array) => void,
@@ -217,10 +216,8 @@ export class Virtio9p {
         this.fids = []
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        var state: any[] = []
+        const state: any[] = []
 
         state[0] = this.configspace_tagname
         state[1] = this.configspace_taglen
@@ -238,7 +235,6 @@ export class Virtio9p {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.configspace_tagname = state[0]
         this.configspace_taglen = state[1]
@@ -249,7 +245,7 @@ export class Virtio9p {
         this.msize = state[5]
         this.replybuffer = state[6]
         this.replybuffersize = state[7]
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         this.fids = state[8].map(function (f: any[]) {
             return { inodeid: f[0], type: f[1], uid: f[2], dbg_name: f[3] }
         })
@@ -295,7 +291,7 @@ export class Virtio9p {
     }
 
     SendError(tag: number, errormsg: string, errorcode: number): void {
-        var size = marshall.Marshall(['w'], [errorcode], this.replybuffer, 7)
+        const size = marshall.Marshall(['w'], [errorcode], this.replybuffer, 7)
         this.BuildReply(6, tag, size)
     }
 
@@ -314,18 +310,18 @@ export class Virtio9p {
         bufchain.get_next_blob(buffer)
 
         const state = { offset: 0 }
-        var header = marshall.Unmarshall(['w', 'b', 'h'], buffer, state)
-        var size = header[0]
-        var id = header[1]
-        var tag = header[2]
+        const header = marshall.Unmarshall(['w', 'b', 'h'], buffer, state)
+        let size = header[0]
+        const id = header[1]
+        const tag = header[2]
 
         switch (id) {
             case 8: {
                 // statfs
                 size = this.fs.GetTotalSize() // size used by all files
-                var space = this.fs.GetSpace()
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                var req: any[] = []
+                const space = this.fs.GetSpace()
+
+                const req: any[] = []
                 req[0] = 0x01021997
                 req[1] = this.BLOCKSIZE // optimal transfer block size
                 req[2] = Math.floor(space / req[1]) // free blocks
@@ -350,12 +346,12 @@ export class Virtio9p {
             case 112: // topen
             case 12: {
                 // tlopen
-                var req = marshall.Unmarshall(['w', 'w'], buffer, state)
-                var fid = req[0]
-                var mode = req[1]
+                let req = marshall.Unmarshall(['w', 'w'], buffer, state)
+                const fid = req[0]
+                const mode = req[1]
                 dbg_log('[open] fid=' + fid + ', mode=' + mode, LOG_9P)
-                var idx = this.fids[fid].inodeid
-                var inode = this.fs.GetInode(idx)
+                const idx = this.fids[fid].inodeid
+                const inode = this.fs.GetInode(idx)
                 dbg_log(
                     'file open ' + this.fids[fid].dbg_name + ' tag:' + tag,
                     LOG_9P,
@@ -373,13 +369,13 @@ export class Virtio9p {
 
             case 70: {
                 // link
-                var req = marshall.Unmarshall(['w', 'w', 's'], buffer, state)
-                var dfid = req[0]
-                var fid = req[1]
-                var name = req[2]
+                const req = marshall.Unmarshall(['w', 'w', 's'], buffer, state)
+                const dfid = req[0]
+                const fid = req[1]
+                const name = req[2]
                 dbg_log('[link] dfid=' + dfid + ', name=' + name, LOG_9P)
 
-                var ret = this.fs.Link(
+                const ret = this.fs.Link(
                     this.fids[dfid].inodeid,
                     this.fids[fid].inodeid,
                     name,
@@ -408,15 +404,15 @@ export class Virtio9p {
 
             case 16: {
                 // symlink
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 's', 's', 'w'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var name = req[1]
-                var symgt = req[2]
-                var gid = req[3]
+                const fid = req[0]
+                const name = req[1]
+                const symgt = req[2]
+                const gid = req[3]
                 dbg_log(
                     '[symlink] fid=' +
                         fid +
@@ -428,12 +424,12 @@ export class Virtio9p {
                         gid,
                     LOG_9P,
                 )
-                var idx = this.fs.CreateSymlink(
+                const idx = this.fs.CreateSymlink(
                     name,
                     this.fids[fid].inodeid,
                     symgt,
                 )
-                var inode = this.fs.GetInode(idx)
+                const inode = this.fs.GetInode(idx)
                 inode.uid = this.fids[fid].uid
                 inode.gid = gid
                 marshall.Marshall(['Q'], [inode.qid], this.replybuffer, 7)
@@ -444,17 +440,17 @@ export class Virtio9p {
 
             case 18: {
                 // mknod
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 's', 'w', 'w', 'w', 'w'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var name = req[1]
-                var mode = req[2]
-                var major = req[3]
-                var minor = req[4]
-                var gid = req[5]
+                const fid = req[0]
+                const name = req[1]
+                const mode = req[2]
+                const major = req[3]
+                const minor = req[4]
+                const gid = req[5]
                 dbg_log(
                     '[mknod] fid=' +
                         fid +
@@ -467,13 +463,13 @@ export class Virtio9p {
                         '',
                     LOG_9P,
                 )
-                var idx = this.fs.CreateNode(
+                const idx = this.fs.CreateNode(
                     name,
                     this.fids[fid].inodeid,
                     major,
                     minor,
                 )
-                var inode = this.fs.GetInode(idx)
+                const inode = this.fs.GetInode(idx)
                 inode.mode = mode
                 //inode.mode = mode | S_IFCHR; // XXX: fails "Mknod - fifo" test
                 inode.uid = this.fids[fid].uid
@@ -486,9 +482,9 @@ export class Virtio9p {
 
             case 22: {
                 // TREADLINK
-                var req = marshall.Unmarshall(['w'], buffer, state)
-                var fid = req[0]
-                var inode = this.fs.GetInode(this.fids[fid].inodeid)
+                const req = marshall.Unmarshall(['w'], buffer, state)
+                const fid = req[0]
+                const inode = this.fs.GetInode(this.fids[fid].inodeid)
                 dbg_log(
                     '[readlink] fid=' +
                         fid +
@@ -511,15 +507,15 @@ export class Virtio9p {
 
             case 72: {
                 // tmkdir
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 's', 'w', 'w'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var name = req[1]
-                var mode = req[2]
-                var gid = req[3]
+                const fid = req[0]
+                const name = req[1]
+                const mode = req[2]
+                const gid = req[3]
                 dbg_log(
                     '[mkdir] fid=' +
                         fid +
@@ -531,8 +527,11 @@ export class Virtio9p {
                         gid,
                     LOG_9P,
                 )
-                var idx = this.fs.CreateDirectory(name, this.fids[fid].inodeid)
-                var inode = this.fs.GetInode(idx)
+                const idx = this.fs.CreateDirectory(
+                    name,
+                    this.fids[fid].inodeid,
+                )
+                const inode = this.fs.GetInode(idx)
                 inode.mode = mode | S_IFDIR
                 inode.uid = this.fids[fid].uid
                 inode.gid = gid
@@ -544,16 +543,16 @@ export class Virtio9p {
 
             case 14: {
                 // tlcreate
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 's', 'w', 'w', 'w'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var name = req[1]
-                var flags = req[2]
-                var mode = req[3]
-                var gid = req[4]
+                const fid = req[0]
+                const name = req[1]
+                const flags = req[2]
+                const mode = req[3]
+                const gid = req[4]
                 this.bus.send('9p-create', [name, this.fids[fid].inodeid])
                 dbg_log(
                     '[create] fid=' +
@@ -568,11 +567,11 @@ export class Virtio9p {
                         gid,
                     LOG_9P,
                 )
-                var idx = this.fs.CreateFile(name, this.fids[fid].inodeid)
+                const idx = this.fs.CreateFile(name, this.fids[fid].inodeid)
                 this.fids[fid].inodeid = idx
                 this.fids[fid].type = FID_INODE
                 this.fids[fid].dbg_name = name
-                var inode = this.fs.GetInode(idx)
+                const inode = this.fs.GetInode(idx)
                 inode.uid = this.fids[fid].uid
                 inode.gid = gid
                 inode.mode = mode | S_IFREG
@@ -589,15 +588,15 @@ export class Virtio9p {
 
             case 52: {
                 // lock
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 'b', 'w', 'd', 'd', 'w', 's'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var flags = req[2]
-                var lock_length = req[4] === 0 ? Infinity : req[4]
-                var lock_request = this.fs.DescribeLock(
+                const fid = req[0]
+                const flags = req[2]
+                const lock_length = req[4] === 0 ? Infinity : req[4]
+                const lock_request = this.fs.DescribeLock(
                     req[1],
                     req[3],
                     lock_length,
@@ -617,7 +616,7 @@ export class Virtio9p {
                         lock_request.proc_id,
                 )
 
-                var ret = this.fs.Lock(
+                const ret = this.fs.Lock(
                     this.fids[fid].inodeid,
                     lock_request,
                     flags,
@@ -631,14 +630,14 @@ export class Virtio9p {
 
             case 54: {
                 // getlock
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 'b', 'd', 'd', 'w', 's'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var lock_length = req[3] === 0 ? Infinity : req[3]
-                var lock_request = this.fs.DescribeLock(
+                const fid = req[0]
+                const lock_length = req[3] === 0 ? Infinity : req[3]
+                const lock_request = this.fs.DescribeLock(
                     req[1],
                     req[2],
                     lock_length,
@@ -658,7 +657,7 @@ export class Virtio9p {
                         lock_request.proc_id,
                 )
 
-                var ret_lock = this.fs.GetLock(
+                let ret_lock = this.fs.GetLock(
                     this.fids[fid].inodeid,
                     lock_request,
                 )
@@ -668,7 +667,7 @@ export class Virtio9p {
                     ret_lock.type = P9_LOCK_TYPE_UNLCK
                 }
 
-                var ret_length =
+                const ret_length =
                     ret_lock.length === Infinity ? 0 : ret_lock.length
 
                 size = marshall.Marshall(
@@ -691,9 +690,9 @@ export class Virtio9p {
 
             case 24: {
                 // getattr
-                var req = marshall.Unmarshall(['w', 'd'], buffer, state)
-                var fid = req[0]
-                var inode = this.fs.GetInode(this.fids[fid].inodeid)
+                const req = marshall.Unmarshall(['w', 'd'], buffer, state)
+                const fid = req[0]
+                const inode = this.fs.GetInode(this.fids[fid].inodeid)
                 dbg_log(
                     '[getattr]: fid=' +
                         fid +
@@ -765,7 +764,7 @@ export class Virtio9p {
 
             case 26: {
                 // setattr
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     [
                         'w',
                         'w',
@@ -781,8 +780,8 @@ export class Virtio9p {
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var inode = this.fs.GetInode(this.fids[fid].inodeid)
+                const fid = req[0]
+                const inode = this.fs.GetInode(this.fids[fid].inodeid)
                 dbg_log(
                     '[setattr]: fid=' +
                         fid +
@@ -827,8 +826,8 @@ export class Virtio9p {
 
             case 50: {
                 // fsync
-                var req = marshall.Unmarshall(['w', 'd'], buffer, state)
-                var fid = req[0]
+                const req = marshall.Unmarshall(['w', 'd'], buffer, state)
+                const _fid = req[0]
                 this.BuildReply(id, tag, 0)
                 this.SendReply(bufchain)
                 break
@@ -837,11 +836,11 @@ export class Virtio9p {
             case 40: // TREADDIR
             case 116: {
                 // read
-                var req = marshall.Unmarshall(['w', 'd', 'w'], buffer, state)
-                var fid = req[0]
-                var offset = req[1]
-                var count = req[2]
-                var inode = this.fs.GetInode(this.fids[fid].inodeid)
+                const req = marshall.Unmarshall(['w', 'd', 'w'], buffer, state)
+                const fid = req[0]
+                const offset = req[1]
+                let count = req[2]
+                const inode = this.fs.GetInode(this.fids[fid].inodeid)
                 if (id === 40)
                     dbg_log(
                         '[treaddir]: fid=' +
@@ -875,7 +874,7 @@ export class Virtio9p {
                 if (this.fids[fid].type === FID_XATTR) {
                     if (inode.caps!.length < offset + count)
                         count = inode.caps!.length - offset
-                    for (var i = 0; i < count; i++)
+                    for (let i = 0; i < count; i++)
                         this.replybuffer[7 + 4 + i] = inode.caps![offset + i]
                     marshall.Marshall(['w'], [count], this.replybuffer, 7)
                     this.BuildReply(id, tag, 4 + count)
@@ -920,10 +919,10 @@ export class Virtio9p {
 
             case 118: {
                 // write
-                var req = marshall.Unmarshall(['w', 'd', 'w'], buffer, state)
-                var fid = req[0]
-                var offset = req[1]
-                var count = req[2]
+                const req = marshall.Unmarshall(['w', 'd', 'w'], buffer, state)
+                const fid = req[0]
+                const offset = req[1]
+                const count = req[2]
 
                 const filename = this.fids[fid].dbg_name
 
@@ -965,20 +964,20 @@ export class Virtio9p {
 
             case 74: {
                 // RENAMEAT
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 's', 'w', 's'],
                     buffer,
                     state,
                 )
-                var olddirfid = req[0]
-                var oldname = req[1]
-                var newdirfid = req[2]
-                var newname = req[3]
+                const olddirfid = req[0]
+                const oldname = req[1]
+                const newdirfid = req[2]
+                const newname = req[3]
                 dbg_log(
                     '[renameat]: oldname=' + oldname + ' newname=' + newname,
                     LOG_9P,
                 )
-                var ret = await this.fs.Rename(
+                const ret = await this.fs.Rename(
                     this.fids[olddirfid].inodeid,
                     oldname,
                     this.fids[newdirfid].inodeid,
@@ -1017,10 +1016,10 @@ export class Virtio9p {
 
             case 76: {
                 // TUNLINKAT
-                var req = marshall.Unmarshall(['w', 's', 'w'], buffer, state)
-                var dirfd = req[0]
-                var name = req[1]
-                var flags = req[2]
+                const req = marshall.Unmarshall(['w', 's', 'w'], buffer, state)
+                const dirfd = req[0]
+                const name = req[1]
+                const flags = req[2]
                 dbg_log(
                     '[unlink]: dirfd=' +
                         dirfd +
@@ -1030,13 +1029,16 @@ export class Virtio9p {
                         flags,
                     LOG_9P,
                 )
-                var fid_search = this.fs.Search(this.fids[dirfd].inodeid, name)
+                const fid_search = this.fs.Search(
+                    this.fids[dirfd].inodeid,
+                    name,
+                )
                 if (fid_search === -1) {
                     this.SendError(tag, 'No such file or directory', ENOENT)
                     this.SendReply(bufchain)
                     break
                 }
-                var ret = this.fs.Unlink(this.fids[dirfd].inodeid, name)
+                const ret = this.fs.Unlink(this.fids[dirfd].inodeid, name)
                 if (ret < 0) {
                     let error_message = ''
                     if (ret === -ENOTEMPTY)
@@ -1061,7 +1063,7 @@ export class Virtio9p {
 
             case 100: {
                 // version
-                var version = marshall.Unmarshall(['w', 's'], buffer, state)
+                const version = marshall.Unmarshall(['w', 's'], buffer, state)
                 dbg_log(
                     '[version]: msize=' + version[0] + ' version=' + version[1],
                     LOG_9P,
@@ -1086,13 +1088,13 @@ export class Virtio9p {
             case 104: {
                 // attach
                 // return root directorie's QID
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 'w', 's', 's', 'w'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var uid = req[4]
+                const fid = req[0]
+                const uid = req[4]
                 dbg_log(
                     '[attach]: fid=' +
                         fid +
@@ -1105,7 +1107,7 @@ export class Virtio9p {
                     LOG_9P,
                 )
                 this.fids[fid] = this.Createfid(0, FID_INODE, uid, '')
-                var inode = this.fs.GetInode(this.fids[fid].inodeid)
+                const inode = this.fs.GetInode(this.fids[fid].inodeid)
                 marshall.Marshall(['Q'], [inode.qid], this.replybuffer, 7)
                 this.BuildReply(id, tag, 13)
                 this.SendReply(bufchain)
@@ -1115,8 +1117,8 @@ export class Virtio9p {
 
             case 108: {
                 // tflush
-                var req = marshall.Unmarshall(['h'], buffer, state)
-                var oldtag = req[0]
+                const req = marshall.Unmarshall(['h'], buffer, state)
+                const _oldtag = req[0]
                 dbg_log('[flush] ' + tag, LOG_9P)
                 this.BuildReply(id, tag, 0)
                 this.SendReply(bufchain)
@@ -1125,10 +1127,10 @@ export class Virtio9p {
 
             case 110: {
                 // walk
-                var req = marshall.Unmarshall(['w', 'w', 'h'], buffer, state)
-                var fid = req[0]
-                var nwfid = req[1]
-                var nwname = req[2]
+                const req = marshall.Unmarshall(['w', 'w', 'h'], buffer, state)
+                const fid = req[0]
+                const nwfid = req[1]
+                const nwname = req[2]
                 dbg_log(
                     '[walk]: fid=' +
                         req[0] +
@@ -1150,18 +1152,18 @@ export class Virtio9p {
                     this.SendReply(bufchain)
                     break
                 }
-                var wnames: string[] = []
-                for (var i = 0; i < nwname; i++) {
+                const wnames: string[] = []
+                for (let i = 0; i < nwname; i++) {
                     wnames.push('s')
                 }
-                var walk = marshall.Unmarshall(
+                const walk = marshall.Unmarshall(
                     wnames as marshall.MarshallTypeCode[],
                     buffer,
                     state,
                 )
-                var idx = this.fids[fid].inodeid
+                let idx = this.fids[fid].inodeid
                 let offset = 7 + 2
-                var nwidx = 0
+                let nwidx = 0
                 dbg_log(
                     'walk in dir ' +
                         this.fids[fid].dbg_name +
@@ -1169,7 +1171,7 @@ export class Virtio9p {
                         walk.toString(),
                     LOG_9P,
                 )
-                for (var i = 0; i < nwname; i++) {
+                for (let i = 0; i < nwname; i++) {
                     idx = this.fs.Search(idx, walk[i])
 
                     if (idx === -1) {
@@ -1198,7 +1200,7 @@ export class Virtio9p {
 
             case 120: {
                 // clunk
-                var req = marshall.Unmarshall(['w'], buffer, state)
+                const req = marshall.Unmarshall(['w'], buffer, state)
                 dbg_log('[clunk]: fid=' + req[0], LOG_9P)
                 if (this.fids[req[0]] && this.fids[req[0]].inodeid >= 0) {
                     await this.fs.CloseInode(this.fids[req[0]].inodeid)
@@ -1212,15 +1214,15 @@ export class Virtio9p {
 
             case 32: {
                 // txattrcreate
-                var req = marshall.Unmarshall(
+                const req = marshall.Unmarshall(
                     ['w', 's', 'd', 'w'],
                     buffer,
                     state,
                 )
-                var fid = req[0]
-                var name = req[1]
-                var attr_size = req[2]
-                var flags = req[3]
+                const fid = req[0]
+                const name = req[1]
+                const attr_size = req[2]
+                const flags = req[3]
                 dbg_log(
                     '[txattrcreate]: fid=' +
                         fid +
@@ -1243,10 +1245,10 @@ export class Virtio9p {
 
             case 30: {
                 // xattrwalk
-                var req = marshall.Unmarshall(['w', 'w', 's'], buffer, state)
-                var fid = req[0]
-                var newfid = req[1]
-                var name = req[2]
+                const req = marshall.Unmarshall(['w', 'w', 's'], buffer, state)
+                const _fid = req[0]
+                const _newfid = req[1]
+                const _name = req[2]
                 dbg_log(
                     '[xattrwalk]: fid=' +
                         req[0] +
@@ -1298,19 +1300,19 @@ export class Virtio9pHandler {
                 const reqbuf = new Uint8Array(bufchain.length_readable)
                 bufchain.get_next_blob(reqbuf)
 
-                var reqheader = marshall.Unmarshall(['w', 'b', 'h'], reqbuf, {
+                const reqheader = marshall.Unmarshall(['w', 'b', 'h'], reqbuf, {
                     offset: 0,
                 })
-                var reqtag = reqheader[2]
+                const reqtag = reqheader[2]
 
                 this.tag_bufchain.set(reqtag, bufchain)
                 this.handle_fn(reqbuf, (replybuf: Uint8Array) => {
-                    var replyheader = marshall.Unmarshall(
+                    const replyheader = marshall.Unmarshall(
                         ['w', 'b', 'h'],
                         replybuf,
                         { offset: 0 },
                     )
-                    var replytag = replyheader[2]
+                    const replytag = replyheader[2]
 
                     const bufchain = this.tag_bufchain.get(replytag)
                     if (!bufchain) {
@@ -1329,10 +1331,8 @@ export class Virtio9pHandler {
         this.virtqueue = this.virtio.queues[0]
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        var state: any[] = []
+        const state: any[] = []
 
         state[0] = this.configspace_tagname
         state[1] = this.configspace_taglen
@@ -1342,7 +1342,6 @@ export class Virtio9pHandler {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.configspace_tagname = state[0]
         this.configspace_taglen = state[1]
@@ -1410,10 +1409,8 @@ export class Virtio9pProxy {
         this.virtqueue = this.virtio.queues[0]
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        var state: any[] = []
+        const state: any[] = []
 
         state[0] = this.configspace_tagname
         state[1] = this.configspace_taglen
@@ -1423,7 +1420,6 @@ export class Virtio9pProxy {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.configspace_tagname = state[0]
         this.configspace_taglen = state[1]
@@ -1466,7 +1462,7 @@ export class Virtio9pProxy {
     }
 
     handle_open(_e: Event): void {
-        for (var i = 0; i < this.send_queue.length; i++) {
+        for (let i = 0; i < this.send_queue.length; i++) {
             this.send(this.send_queue[i])
         }
 
@@ -1490,7 +1486,7 @@ export class Virtio9pProxy {
         }
 
         if (this.socket) {
-            var state = this.socket.readyState
+            const state = this.socket.readyState
 
             if (state === 0 || state === 1) {
                 // already or almost there
@@ -1498,7 +1494,7 @@ export class Virtio9pProxy {
             }
         }
 
-        var now = Date.now()
+        const now = Date.now()
 
         if (this.last_connect_attempt + this.reconnect_interval > now) {
             return

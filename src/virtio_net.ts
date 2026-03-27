@@ -173,7 +173,8 @@ export class VirtioNet {
                             //this.Ack(queue_id, bufchain);
 
                             switch ((xclass << 8) | command) {
-                                case (4 << 8) | VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET:
+                                case (4 << 8) |
+                                    VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET: {
                                     const data = marshall.Unmarshall(
                                         ['h'],
                                         buffer,
@@ -186,6 +187,7 @@ export class VirtioNet {
                                         new Uint8Array([0]),
                                     )
                                     break
+                                }
                                 case (1 << 8) | VIRTIO_NET_CTRL_MAC_ADDR_SET:
                                     this.mac = buffer.subarray(2, 8)
                                     this.Send(

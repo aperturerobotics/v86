@@ -2,7 +2,7 @@ import { pads } from '../lib.js'
 
 interface CPU {
     wm: {
-        exports: Record<string, Function>
+        exports: Record<string, (...args: any[]) => any>
     }
     wasm_memory: WebAssembly.Memory
 }
@@ -289,9 +289,8 @@ function print_instruction_counts_offset(
 
     const factor = total > 1e7 ? 1000 : 1
 
-    const max_count = Math.max.apply(
-        Math,
-        counts.map(({ count }) => Math.round(count / factor)),
+    const max_count = Math.max(
+        ...counts.map(({ count }) => Math.round(count / factor)),
     )
     const pad_length = String(max_count).length
 

@@ -1,4 +1,3 @@
-import { CPU } from './cpu.js'
 import { load_file, get_file_size } from './lib.js'
 import { dbg_assert, dbg_log } from './log.js'
 
@@ -27,7 +26,9 @@ export class SyncBuffer {
     }
 
     load(): void {
-        this.onload && this.onload({ buffer: this.buffer })
+        if (this.onload) {
+            this.onload({ buffer: this.buffer })
+        }
     }
 
     get(start: number, len: number, fn: (data: Uint8Array) => void): void {
@@ -79,21 +80,25 @@ class AsyncXHRBuffer {
 
     async load(): Promise<void> {
         if (this.byteLength !== undefined) {
-            this.onload && this.onload(Object.create(null))
+            if (this.onload) {
+                this.onload(Object.create(null))
+            }
             return
         }
 
         const size = await get_file_size(this.filename)
         this.byteLength = size
-        this.onload && this.onload(Object.create(null))
+        if (this.onload) {
+            this.onload(Object.create(null))
+        }
     }
 
     get_from_cache(offset: number, len: number): Uint8Array | undefined {
-        var number_of_blocks = len / BLOCK_SIZE
-        var block_index = offset / BLOCK_SIZE
+        const number_of_blocks = len / BLOCK_SIZE
+        const block_index = offset / BLOCK_SIZE
 
-        for (var i = 0; i < number_of_blocks; i++) {
-            var block = this.block_cache.get(block_index + i)
+        for (let i = 0; i < number_of_blocks; i++) {
+            const block = this.block_cache.get(block_index + i)
 
             if (!block) {
                 return
@@ -103,8 +108,8 @@ class AsyncXHRBuffer {
         if (number_of_blocks === 1) {
             return this.block_cache.get(block_index)
         } else {
-            var result = new Uint8Array(len)
-            for (var i = 0; i < number_of_blocks; i++) {
+            const result = new Uint8Array(len)
+            for (let i = 0; i < number_of_blocks; i++) {
                 result.set(
                     this.block_cache.get(block_index + i)!,
                     i * BLOCK_SIZE,
@@ -120,7 +125,7 @@ class AsyncXHRBuffer {
         dbg_assert(len % BLOCK_SIZE === 0)
         dbg_assert(len > 0)
 
-        var block = this.get_from_cache(offset, len)
+        const block = this.get_from_cache(offset, len)
         if (block) {
             if (ASYNC_SAFE) {
                 setTimeout(fn.bind(this, block), 0)
@@ -130,8 +135,8 @@ class AsyncXHRBuffer {
             return
         }
 
-        var requested_start = offset
-        var requested_length = len
+        let requested_start = offset
+        let requested_length = len
         if (this.fixed_chunk_size) {
             requested_start = offset - (offset % this.fixed_chunk_size)
             requested_length =
@@ -142,7 +147,7 @@ class AsyncXHRBuffer {
 
         load_file(this.filename, {
             done: function (this: AsyncXHRBuffer, buffer: ArrayBuffer) {
-                var block = new Uint8Array(buffer)
+                const block = new Uint8Array(buffer)
                 this.handle_read(requested_start, requested_length, block)
                 if (requested_start === offset && requested_length === len) {
                     fn(block)
@@ -160,17 +165,17 @@ class AsyncXHRBuffer {
     }
 
     set(start: number, data: Uint8Array, fn: () => void): void {
-        var len = data.length
+        const len = data.length
         dbg_assert(start + data.byteLength <= this.byteLength!)
         dbg_assert(start % BLOCK_SIZE === 0)
         dbg_assert(len % BLOCK_SIZE === 0)
         dbg_assert(len > 0)
 
-        var start_block = start / BLOCK_SIZE
-        var block_count = len / BLOCK_SIZE
+        const start_block = start / BLOCK_SIZE
+        const block_count = len / BLOCK_SIZE
 
-        for (var i = 0; i < block_count; i++) {
-            var block = this.block_cache.get(start_block + i)
+        for (let i = 0; i < block_count; i++) {
+            const block = this.block_cache.get(start_block + i)
 
             if (block === undefined) {
                 const data_slice = data.slice(
@@ -197,10 +202,10 @@ class AsyncXHRBuffer {
         // Used by AsyncXHRBuffer, AsyncXHRPartfileBuffer and AsyncFileBuffer
         // Overwrites blocks from the original source that have been written since
 
-        var start_block = offset / BLOCK_SIZE
-        var block_count = len / BLOCK_SIZE
+        const start_block = offset / BLOCK_SIZE
+        const block_count = len / BLOCK_SIZE
 
-        for (var i = 0; i < block_count; i++) {
+        for (let i = 0; i < block_count; i++) {
             const cached_block = this.block_cache.get(start_block + i)
 
             if (cached_block) {
@@ -254,7 +259,7 @@ export class AsyncXHRPartfileBuffer {
     byteLength: number | undefined
     fixed_chunk_size: number | undefined
     partfile_alt_format: boolean
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     zstd_decompress:
         | ((size: number, data: Uint8Array) => Promise<any>)
         | undefined
@@ -267,7 +272,7 @@ export class AsyncXHRPartfileBuffer {
         size: number | undefined,
         fixed_chunk_size: number | undefined,
         partfile_alt_format: boolean | undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         zstd_decompress?: (size: number, data: Uint8Array) => Promise<any>,
     ) {
         const parts = filename.match(/\.[^.]+(\.zst)?$/)
@@ -294,11 +299,15 @@ export class AsyncXHRPartfileBuffer {
 
     load(): void {
         if (this.byteLength !== undefined) {
-            this.onload && this.onload(Object.create(null))
+            if (this.onload) {
+                this.onload(Object.create(null))
+            }
             return
         }
         dbg_assert(false)
-        this.onload && this.onload(Object.create(null))
+        if (this.onload) {
+            this.onload(Object.create(null))
+        }
     }
 
     get(offset: number, len: number, fn: (data: Uint8Array) => void): void {
@@ -397,7 +406,7 @@ export class AsyncXHRPartfileBuffer {
                     buffer: ArrayBuffer,
                 ) {
                     dbg_assert(buffer.byteLength === len)
-                    var block = new Uint8Array(buffer)
+                    const block = new Uint8Array(buffer)
                     this.handle_read(offset, len, block)
                     fn(block)
                 }.bind(this),
@@ -448,7 +457,7 @@ export class SyncFileBuffer {
     load_next(start: number): void {
         const PART_SIZE = 4 << 20
 
-        var filereader = new FileReader()
+        const filereader = new FileReader()
 
         filereader.onload = function (
             this: SyncFileBuffer,
@@ -456,7 +465,7 @@ export class SyncFileBuffer {
         ) {
             const result = e.target!.result
             if (!(result instanceof ArrayBuffer)) return
-            var buffer = new Uint8Array(result)
+            const buffer = new Uint8Array(result)
             new Uint8Array(this.buffer, start).set(buffer)
             this.load_next(start + PART_SIZE)
         }.bind(this)
@@ -470,12 +479,14 @@ export class SyncFileBuffer {
         }
 
         if (start < this.byteLength) {
-            var end = Math.min(start + PART_SIZE, this.byteLength)
-            var slice = this.file!.slice(start, end)
+            const end = Math.min(start + PART_SIZE, this.byteLength)
+            const slice = this.file!.slice(start, end)
             filereader.readAsArrayBuffer(slice)
         } else {
             this.file = undefined
-            this.onload && this.onload({ buffer: this.buffer })
+            if (this.onload) {
+                this.onload({ buffer: this.buffer })
+            }
         }
     }
 
@@ -500,7 +511,9 @@ export class AsyncFileBuffer {
     }
 
     load(): void {
-        this.onload && this.onload(Object.create(null))
+        if (this.onload) {
+            this.onload(Object.create(null))
+        }
     }
 
     get(offset: number, len: number, fn: (data: Uint8Array) => void): void {
@@ -508,13 +521,13 @@ export class AsyncFileBuffer {
         dbg_assert(len % BLOCK_SIZE === 0)
         dbg_assert(len > 0)
 
-        var block = this.get_from_cache(offset, len)
+        const block = this.get_from_cache(offset, len)
         if (block) {
             fn(block)
             return
         }
 
-        var fr = new FileReader()
+        const fr = new FileReader()
 
         fr.onload = function (
             this: AsyncFileBuffer,
@@ -522,7 +535,7 @@ export class AsyncFileBuffer {
         ) {
             const result = e.target!.result
             if (!(result instanceof ArrayBuffer)) return
-            var block = new Uint8Array(result)
+            const block = new Uint8Array(result)
 
             this.handle_read(offset, len, block)
             fn(block)
@@ -543,19 +556,19 @@ export class AsyncFileBuffer {
     }
 
     get_as_file(name: string): File {
-        var parts: BlobPart[] = []
-        var existing_blocks = Array.from(this.block_cache.keys()).sort(
+        const parts: BlobPart[] = []
+        const existing_blocks = Array.from(this.block_cache.keys()).sort(
             function (x, y) {
                 return x - y
             },
         )
 
-        var current_offset = 0
+        let current_offset = 0
 
-        for (var i = 0; i < existing_blocks.length; i++) {
-            var block_index = existing_blocks[i]
-            var block = this.block_cache.get(block_index)!
-            var start = block_index * BLOCK_SIZE
+        for (let i = 0; i < existing_blocks.length; i++) {
+            const block_index = existing_blocks[i]
+            const block = this.block_cache.get(block_index)!
+            const start = block_index * BLOCK_SIZE
             dbg_assert(start >= current_offset)
 
             if (start !== current_offset) {
@@ -571,7 +584,7 @@ export class AsyncFileBuffer {
             parts.push(this.file.slice(current_offset))
         }
 
-        var file = new File(parts, name)
+        const file = new File(parts, name)
         dbg_assert(file.size === this.file.size)
 
         return file
@@ -587,7 +600,7 @@ export function buffer_from_object(
         async?: boolean
         use_parts?: boolean
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     zstd_decompress_worker?: (size: number, data: Uint8Array) => Promise<any>,
 ):
     | SyncBuffer

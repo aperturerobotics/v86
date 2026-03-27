@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { LOG_IO, MMAP_BLOCK_BITS, MMAP_BLOCK_SIZE, MMAP_MAX } from './const.js'
 import { h } from './lib.js'
@@ -44,13 +44,13 @@ export class IO {
         this.ports = []
         this.cpu = cpu
 
-        for (var i = 0; i < 0x10000; i++) {
+        for (let i = 0; i < 0x10000; i++) {
             this.ports[i] = this.create_empty_entry()
         }
 
-        var memory_size = cpu.memory_size[0]
+        const memory_size = cpu.memory_size[0]
 
-        for (var i = 0; i << MMAP_BLOCK_BITS < memory_size; i++) {
+        for (let i = 0; i << MMAP_BLOCK_BITS < memory_size; i++) {
             // avoid sparse arrays
             cpu.memory_map_read8[i] = cpu.memory_map_write8[i] = undefined
             cpu.memory_map_read32[i] = cpu.memory_map_write32[i] = undefined
@@ -139,7 +139,7 @@ export class IO {
         dbg_assert(!!(r8 || r16 || r32))
 
         if (DEBUG) {
-            var fail = function (n: number): number {
+            const fail = function (n: number): number {
                 dbg_assert(
                     false,
                     'Overlapped read' +
@@ -178,7 +178,7 @@ export class IO {
         dbg_assert(!!(w8 || w16 || w32))
 
         if (DEBUG) {
-            var fail = function (n: number): void {
+            const fail = function (n: number): void {
                 dbg_assert(
                     false,
                     'Overlapped write' +
@@ -278,8 +278,8 @@ export class IO {
     }
 
     mmap_read32_shim(addr: number): number {
-        var aligned_addr = addr >>> MMAP_BLOCK_BITS
-        var fn = this.cpu.memory_map_read8[aligned_addr]!
+        const aligned_addr = addr >>> MMAP_BLOCK_BITS
+        const fn = this.cpu.memory_map_read8[aligned_addr]!
 
         return (
             fn(addr) |
@@ -290,8 +290,8 @@ export class IO {
     }
 
     mmap_write32_shim(addr: number, value: number): void {
-        var aligned_addr = addr >>> MMAP_BLOCK_BITS
-        var fn = this.cpu.memory_map_write8[aligned_addr]!
+        const aligned_addr = addr >>> MMAP_BLOCK_BITS
+        const fn = this.cpu.memory_map_write8[aligned_addr]!
 
         fn(addr, value & 0xff)
         fn(addr + 1, (value >> 8) & 0xff)
@@ -319,7 +319,7 @@ export class IO {
 
         if (!write_func32) write_func32 = this.mmap_write32_shim.bind(this)
 
-        var aligned_addr = addr >>> MMAP_BLOCK_BITS
+        let aligned_addr = addr >>> MMAP_BLOCK_BITS
 
         for (; size > 0; aligned_addr++) {
             this.cpu.memory_map_read8[aligned_addr] = read_func8
@@ -332,7 +332,7 @@ export class IO {
     }
 
     port_write8(port_addr: number, data: number): void {
-        var entry = this.ports[port_addr]
+        const entry = this.ports[port_addr]
 
         if (entry.write8 === this.empty_port_write || LOG_ALL_IO) {
             dbg_log(
@@ -348,7 +348,7 @@ export class IO {
     }
 
     port_write16(port_addr: number, data: number): void {
-        var entry = this.ports[port_addr]
+        const entry = this.ports[port_addr]
 
         if (entry.write16 === this.empty_port_write || LOG_ALL_IO) {
             dbg_log(
@@ -364,7 +364,7 @@ export class IO {
     }
 
     port_write32(port_addr: number, data: number): void {
-        var entry = this.ports[port_addr]
+        const entry = this.ports[port_addr]
 
         if (entry.write32 === this.empty_port_write || LOG_ALL_IO) {
             dbg_log(
@@ -380,7 +380,7 @@ export class IO {
     }
 
     port_read8(port_addr: number): number {
-        var entry = this.ports[port_addr]
+        const entry = this.ports[port_addr]
 
         if (entry.read8 === this.empty_port_read8 || LOG_ALL_IO) {
             dbg_log(
@@ -390,7 +390,7 @@ export class IO {
                 LOG_IO,
             )
         }
-        var value = entry.read8.call(entry.device, port_addr)
+        const value = entry.read8.call(entry.device, port_addr)
         dbg_assert(typeof value === 'number')
         if (value < 0 || value >= 0x100)
             dbg_assert(
@@ -401,7 +401,7 @@ export class IO {
     }
 
     port_read16(port_addr: number): number {
-        var entry = this.ports[port_addr]
+        const entry = this.ports[port_addr]
 
         if (entry.read16 === this.empty_port_read16 || LOG_ALL_IO) {
             dbg_log(
@@ -411,7 +411,7 @@ export class IO {
                 LOG_IO,
             )
         }
-        var value = entry.read16.call(entry.device, port_addr)
+        const value = entry.read16.call(entry.device, port_addr)
         dbg_assert(typeof value === 'number')
         if (value < 0 || value >= 0x10000)
             dbg_assert(
@@ -422,7 +422,7 @@ export class IO {
     }
 
     port_read32(port_addr: number): number {
-        var entry = this.ports[port_addr]
+        const entry = this.ports[port_addr]
 
         if (entry.read32 === this.empty_port_read32 || LOG_ALL_IO) {
             dbg_log(
@@ -432,7 +432,7 @@ export class IO {
                 LOG_IO,
             )
         }
-        var value = entry.read32.call(entry.device, port_addr)
+        const value = entry.read32.call(entry.device, port_addr)
         dbg_assert((value | 0) === value)
         return value
     }
@@ -447,7 +447,7 @@ export class IO {
 }
 
 // via seabios ioport.h
-var debug_port_list: Record<number, string> = {
+const debug_port_list: Record<number, string> = {
     0x0004: 'PORT_DMA_ADDR_2',
     0x0005: 'PORT_DMA_CNT_2',
     0x000a: 'PORT_DMA1_MASK_REG',

@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 if (typeof DEBUG === 'undefined') {
     Object.defineProperty(globalThis, 'DEBUG', {
@@ -26,9 +26,9 @@ import {
     LOG_VIRTIO,
 } from './const.js'
 
-export var LOG_TO_FILE = false
+export const LOG_TO_FILE = false
 
-export var LOG_LEVEL: number =
+export let LOG_LEVEL: number =
     LOG_ALL &
     ~LOG_PS2 &
     ~LOG_PIT &
@@ -47,7 +47,7 @@ export function set_log_level(level: number): void {
     LOG_LEVEL = level
 }
 
-export var log_data: string[] = []
+export const log_data: string[] = []
 
 function do_the_log(message: string): void {
     if (LOG_TO_FILE) {
@@ -69,8 +69,8 @@ export const dbg_log: (stuff: string | number, level?: number) => void =
             return a
         }, init)
 
-        var log_last_message = ''
-        var log_message_repetitions = 0
+        let log_last_message = ''
+        let log_message_repetitions = 0
 
         function dbg_log_(stuff: string | number, level?: number): void {
             if (!DEBUG) return
@@ -78,7 +78,7 @@ export const dbg_log: (stuff: string | number, level?: number) => void =
             level = level || 1
 
             if (level & LOG_LEVEL) {
-                var level_name = dbg_names[level] || '',
+                const level_name = dbg_names[level] || '',
                     message = '[' + pads(level_name, 4) + '] ' + stuff
 
                 if (message === log_last_message) {
@@ -89,8 +89,8 @@ export const dbg_log: (stuff: string | number, level?: number) => void =
                     }
                 }
 
-                var now = new Date()
-                var time_str =
+                const now = new Date()
+                const time_str =
                     pad0(now.getHours(), 2) +
                     ':' +
                     pad0(now.getMinutes(), 2) +
@@ -137,6 +137,7 @@ export function dbg_assert(cond: boolean, msg?: string, _level?: number): void {
 }
 
 export function dbg_assert_failed(msg?: string): never {
+    // eslint-disable-next-line no-debugger
     debugger
     console.trace()
 

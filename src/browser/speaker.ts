@@ -1,8 +1,8 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 // AudioWorkletProcessor is available in AudioWorklet scope but not in main thread scope.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare var AudioWorkletProcessor: any
+
+declare let AudioWorkletProcessor: any
 
 import {
     MIXER_CHANNEL_BOTH,
@@ -17,13 +17,16 @@ import { OSCILLATOR_FREQ } from '../pit.js'
 import { dump_file } from '../lib.js'
 import { BusConnector } from '../bus.js'
 
-/* global registerProcessor, sampleRate */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare const registerProcessor: any
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare const sampleRate: number
 
 const DAC_QUEUE_RESERVE = 0.2
 
 const AUDIOBUFFER_MINIMUM_SAMPLING_RATE = 8000
 
-interface SpeakerDACInterface {
+interface _SpeakerDACInterface {
     node_processor: AudioWorkletNode | null
     pump(): void
 }
@@ -54,7 +57,7 @@ export class SpeakerAdapter {
             return
         }
 
-        var SpeakerDAC = window.AudioWorklet
+        const SpeakerDAC = window.AudioWorklet
             ? SpeakerWorkletDAC
             : SpeakerBufferSourceDAC
 
@@ -97,11 +100,13 @@ export class SpeakerAdapter {
     }
 
     destroy(): void {
-        this.audio_context && this.audio_context.close()
+        if (this.audio_context) {
+            this.audio_context.close()
+        }
         this.audio_context = null
-        this.dac &&
-            this.dac.node_processor &&
+        if (this.dac && this.dac.node_processor) {
             this.dac.node_processor.port.close()
+        }
         this.dac = undefined!
     }
 }
@@ -177,8 +182,8 @@ class SpeakerMixer {
         bus.register(
             'mixer-connect',
             function (this: SpeakerMixer, data: [number, number]) {
-                var source_id = data[0]
-                var channel = data[1]
+                const source_id = data[0]
+                const channel = data[1]
                 this.connect_source(source_id, channel)
             },
             this,
@@ -187,8 +192,8 @@ class SpeakerMixer {
         bus.register(
             'mixer-disconnect',
             function (this: SpeakerMixer, data: [number, number]) {
-                var source_id = data[0]
-                var channel = data[1]
+                const source_id = data[0]
+                const channel = data[1]
                 this.disconnect_source(source_id, channel)
             },
             this,
@@ -197,13 +202,13 @@ class SpeakerMixer {
         bus.register(
             'mixer-volume',
             function (this: SpeakerMixer, data: [number, number, number]) {
-                var source_id = data[0]
-                var channel = data[1]
-                var decibels = data[2]
+                const source_id = data[0]
+                const channel = data[1]
+                const decibels = data[2]
 
-                var gain = Math.pow(10, decibels / 20)
+                const gain = Math.pow(10, decibels / 20)
 
-                var source: SpeakerMixer | SpeakerMixerSource | undefined =
+                const source: SpeakerMixer | SpeakerMixerSource | undefined =
                     source_id === MIXER_SRC_MASTER
                         ? this
                         : this.sources.get(source_id)
@@ -271,7 +276,7 @@ class SpeakerMixer {
     }
 
     add_source(source_node: AudioNode, source_id: number): SpeakerMixerSource {
-        var source = new SpeakerMixerSource(
+        const source = new SpeakerMixerSource(
             this.audio_context,
             source_node,
             this.input_left,
@@ -288,7 +293,7 @@ class SpeakerMixer {
     }
 
     connect_source(source_id: number, channel?: number): void {
-        var source = this.sources.get(source_id)
+        const source = this.sources.get(source_id)
 
         if (source === undefined) {
             dbg_assert(
@@ -302,7 +307,7 @@ class SpeakerMixer {
     }
 
     disconnect_source(source_id: number, channel?: number): void {
-        var source = this.sources.get(source_id)
+        const source = this.sources.get(source_id)
 
         if (source === undefined) {
             dbg_assert(
@@ -343,8 +348,9 @@ class SpeakerMixer {
     }
 
     update(): void {
-        var net_gain_left = this.volume_both * this.volume_left * this.gain_left
-        var net_gain_right =
+        const net_gain_left =
+            this.volume_both * this.volume_left * this.gain_left
+        const net_gain_right =
             this.volume_both * this.volume_right * this.gain_right
 
         this.node_gain_left.gain.setValueAtTime(
@@ -394,12 +400,12 @@ class SpeakerMixerSource {
     }
 
     update(): void {
-        var net_gain_left =
+        const net_gain_left =
             +this.connected_left *
             this.gain_hidden *
             this.volume_both *
             this.volume_left
-        var net_gain_right =
+        const net_gain_right =
             +this.connected_right *
             this.gain_hidden *
             this.volume_both *
@@ -416,7 +422,7 @@ class SpeakerMixerSource {
     }
 
     connect(channel?: number): void {
-        var both = !channel || channel === MIXER_CHANNEL_BOTH
+        const both = !channel || channel === MIXER_CHANNEL_BOTH
         if (both || channel === MIXER_CHANNEL_LEFT) {
             this.connected_left = true
         }
@@ -427,7 +433,7 @@ class SpeakerMixerSource {
     }
 
     disconnect(channel?: number): void {
-        var both = !channel || channel === MIXER_CHANNEL_BOTH
+        const both = !channel || channel === MIXER_CHANNEL_BOTH
         if (both || channel === MIXER_CHANNEL_LEFT) {
             this.connected_left = false
         }
@@ -509,11 +515,11 @@ class PCSpeaker {
         bus.register(
             'pcspeaker-update',
             function (this: PCSpeaker, data: [number, number]) {
-                var counter_mode = data[0]
-                var counter_reload = data[1]
+                const counter_mode = data[0]
+                const counter_reload = data[1]
 
-                var frequency = 0
-                var beep_enabled = counter_mode === 3
+                let frequency = 0
+                const beep_enabled = counter_mode === 3
 
                 if (beep_enabled) {
                     frequency = (OSCILLATOR_FREQ * 1000) / counter_reload
@@ -569,15 +575,13 @@ class SpeakerWorkletDAC {
                 return Math.sin(x) / x
             }
 
-            var EMPTY_BUFFER: [Float32Array, Float32Array] = [
+            const EMPTY_BUFFER: [Float32Array, Float32Array] = [
                 new Float32Array(MINIMUM_BUFFER_SIZE),
                 new Float32Array(MINIMUM_BUFFER_SIZE),
             ]
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             function DACProcessor(this: any) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                var self = Reflect.construct(
+                const self = Reflect.construct(
                     AudioWorkletProcessor,
                     [],
                     DACProcessor,
@@ -603,7 +607,6 @@ class SpeakerWorkletDAC {
 
                 self.source_offset = 0
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 self.port.onmessage = (event: any) => {
                     switch (event.data.type) {
                         case 'queue':
@@ -611,7 +614,6 @@ class SpeakerWorkletDAC {
                             break
                         case 'sampling-rate':
                             self.source_samples_per_destination =
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 event.data.value /
                                 (globalThis as any).sampleRate
                             break
@@ -627,7 +629,6 @@ class SpeakerWorkletDAC {
             )
             Reflect.setPrototypeOf(DACProcessor, AudioWorkletProcessor)
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype['process'] = DACProcessor.prototype.process =
                 function (
                     this: any,
@@ -635,15 +636,15 @@ class SpeakerWorkletDAC {
                     outputs: any,
                     _parameters: any,
                 ) {
-                    for (var i = 0; i < outputs[0][0].length; i++) {
-                        var sum0 = 0
-                        var sum1 = 0
+                    for (let i = 0; i < outputs[0][0].length; i++) {
+                        let sum0 = 0
+                        let sum1 = 0
 
-                        var start = this.source_offset - this.kernel_size + 1
-                        var end = this.source_offset + this.kernel_size
+                        const start = this.source_offset - this.kernel_size + 1
+                        const end = this.source_offset + this.kernel_size
 
-                        for (var j = start; j <= end; j++) {
-                            var convolute_index = this.source_block_start + j
+                        for (let j = start; j <= end; j++) {
+                            const convolute_index = this.source_block_start + j
                             sum0 +=
                                 this.get_sample(convolute_index, 0) *
                                 this.kernel(this.source_time - j)
@@ -664,7 +665,7 @@ class SpeakerWorkletDAC {
                         this.source_offset = Math.floor(this.source_time)
                     }
 
-                    var samples_needed_per_block = this.source_offset
+                    let samples_needed_per_block = this.source_offset
                     samples_needed_per_block += this.kernel_size + 2
 
                     this.source_time -= this.source_offset
@@ -676,12 +677,10 @@ class SpeakerWorkletDAC {
                     return true
                 }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.kernel = function (this: any, x: number) {
                 return sinc(x) * sinc(x / this.kernel_size)
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.get_sample = function (
                 this: any,
                 index: number,
@@ -694,13 +693,12 @@ class SpeakerWorkletDAC {
                 return this.source_buffer_current[channel][index]
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.ensure_enough_data = function (
                 this: any,
                 needed: number,
             ) {
-                var current_length = this.source_buffer_current[0].length
-                var remaining = current_length - this.source_block_start
+                const current_length = this.source_buffer_current[0].length
+                const remaining = current_length - this.source_block_start
 
                 if (remaining < needed) {
                     this.prepare_next_buffer()
@@ -708,7 +706,6 @@ class SpeakerWorkletDAC {
                 }
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.prepare_next_buffer = function (this: any) {
                 if (
                     this.queued_samples < MINIMUM_BUFFER_SIZE &&
@@ -722,11 +719,11 @@ class SpeakerWorkletDAC {
                 this.source_buffer_previous = this.source_buffer_current
                 this.source_buffer_current = this.queue_shift()
 
-                var sample_count = this.source_buffer_current[0].length
+                let sample_count = this.source_buffer_current[0].length
 
                 if (sample_count < MINIMUM_BUFFER_SIZE) {
-                    var queue_pos = this.queue_start
-                    var buffer_count = 0
+                    let queue_pos = this.queue_start
+                    let buffer_count = 0
 
                     while (
                         sample_count < MINIMUM_BUFFER_SIZE &&
@@ -738,22 +735,22 @@ class SpeakerWorkletDAC {
                         buffer_count++
                     }
 
-                    var new_big_buffer_size = Math.max(
+                    const new_big_buffer_size = Math.max(
                         sample_count,
                         MINIMUM_BUFFER_SIZE,
                     )
-                    var new_big_buffer = [
+                    const new_big_buffer = [
                         new Float32Array(new_big_buffer_size),
                         new Float32Array(new_big_buffer_size),
                     ]
 
                     new_big_buffer[0].set(this.source_buffer_current[0])
                     new_big_buffer[1].set(this.source_buffer_current[1])
-                    var new_big_buffer_pos =
+                    let new_big_buffer_pos =
                         this.source_buffer_current[0].length
 
-                    for (var i = 0; i < buffer_count; i++) {
-                        var small_buffer = this.queue_shift()
+                    for (let i = 0; i < buffer_count; i++) {
+                        const small_buffer = this.queue_shift()
                         new_big_buffer[0].set(
                             small_buffer[0],
                             new_big_buffer_pos,
@@ -771,7 +768,6 @@ class SpeakerWorkletDAC {
                 this.pump()
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.pump = function (this: any) {
                 if (
                     this.queued_samples / this.source_samples_per_destination <
@@ -783,7 +779,6 @@ class SpeakerWorkletDAC {
                 }
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.queue_push = function (
                 this: any,
                 item: [Float32Array, Float32Array],
@@ -800,13 +795,12 @@ class SpeakerWorkletDAC {
                 }
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.queue_shift = function (this: any) {
                 if (!this.queue_length) {
                     return EMPTY_BUFFER
                 }
 
-                var item = this.queue_data[this.queue_start]
+                const item = this.queue_data[this.queue_start]
 
                 this.queue_data[this.queue_start] = null
                 this.queue_start =
@@ -818,7 +812,6 @@ class SpeakerWorkletDAC {
                 return item
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             DACProcessor.prototype.dbg_log = function (
                 this: any,
                 message: string,
@@ -830,19 +823,17 @@ class SpeakerWorkletDAC {
                     })
                 }
             }
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ;(globalThis as any).registerProcessor(
                 'dac-processor',
                 DACProcessor,
             )
         }
 
-        var worklet_string = worklet.toString()
+        const worklet_string = worklet.toString()
 
-        var worklet_code_start = worklet_string.indexOf('{') + 1
-        var worklet_code_end = worklet_string.lastIndexOf('}')
-        var worklet_code = worklet_string.substring(
+        const worklet_code_start = worklet_string.indexOf('{') + 1
+        const worklet_code_end = worklet_string.lastIndexOf('}')
+        let worklet_code = worklet_string.substring(
             worklet_code_start,
             worklet_code_end,
         )
@@ -851,10 +842,10 @@ class SpeakerWorkletDAC {
             worklet_code = 'var DEBUG = true;\n' + worklet_code
         }
 
-        var worklet_blob = new Blob([worklet_code], {
+        const worklet_blob = new Blob([worklet_code], {
             type: 'application/javascript',
         })
-        var worklet_url = URL.createObjectURL(worklet_blob)
+        const worklet_url = URL.createObjectURL(worklet_blob)
 
         this.node_output = this.audio_context.createGain()
 
@@ -1068,24 +1059,24 @@ class SpeakerBufferSourceDAC {
             this.debugger!.push_queued_data(data)
         }
 
-        var sample_count = data[0].length
-        var block_duration = sample_count / this.sampling_rate
+        const sample_count = data[0].length
+        const block_duration = sample_count / this.sampling_rate
 
-        var buffer: AudioBuffer
+        let buffer: AudioBuffer
         if (this.rate_ratio > 1) {
-            var new_sample_count = sample_count * this.rate_ratio
-            var new_sampling_rate = this.sampling_rate * this.rate_ratio
+            const new_sample_count = sample_count * this.rate_ratio
+            const new_sampling_rate = this.sampling_rate * this.rate_ratio
             buffer = this.audio_context.createBuffer(
                 2,
                 new_sample_count,
                 new_sampling_rate,
             )
-            var buffer_data0 = buffer.getChannelData(0)
-            var buffer_data1 = buffer.getChannelData(1)
+            const buffer_data0 = buffer.getChannelData(0)
+            const buffer_data1 = buffer.getChannelData(1)
 
-            var buffer_index = 0
-            for (var i = 0; i < sample_count; i++) {
-                for (var j = 0; j < this.rate_ratio; j++, buffer_index++) {
+            let buffer_index = 0
+            for (let i = 0; i < sample_count; i++) {
+                for (let j = 0; j < this.rate_ratio; j++, buffer_index++) {
                     buffer_data0[buffer_index] = data[0][i]
                     buffer_data1[buffer_index] = data[1][i]
                 }
@@ -1105,12 +1096,12 @@ class SpeakerBufferSourceDAC {
             }
         }
 
-        var source = this.audio_context.createBufferSource()
+        const source = this.audio_context.createBufferSource()
         source.buffer = buffer
         source.connect(this.node_lowpass)
         source.addEventListener('ended', this.pump.bind(this))
 
-        var current_time = this.audio_context.currentTime
+        const current_time = this.audio_context.currentTime
 
         if (this.buffered_time < current_time) {
             dbg_log(
@@ -1118,8 +1109,8 @@ class SpeakerBufferSourceDAC {
             )
 
             this.buffered_time = current_time
-            var target_silence_duration = DAC_QUEUE_RESERVE - block_duration
-            var current_silence_duration = 0
+            const target_silence_duration = DAC_QUEUE_RESERVE - block_duration
+            let current_silence_duration = 0
             while (current_silence_duration <= target_silence_duration) {
                 current_silence_duration += block_duration
                 this.buffered_time += block_duration
@@ -1210,7 +1201,7 @@ class SpeakerDACDebugger {
     }
 
     download_txt(history_id: number, channel: number): void {
-        var txt = this.output_history[history_id][channel]
+        const txt = this.output_history[history_id][channel]
             .map((v) => v.join(' '))
             .join(' ')
 
@@ -1218,10 +1209,10 @@ class SpeakerDACDebugger {
     }
 
     download_csv(history_id: number): void {
-        var buffers = this.output_history[history_id]
-        var csv_rows: string[] = []
-        for (var buffer_id = 0; buffer_id < buffers[0].length; buffer_id++) {
-            for (var i = 0; i < buffers[0][buffer_id].length; i++) {
+        const buffers = this.output_history[history_id]
+        const csv_rows: string[] = []
+        for (let buffer_id = 0; buffer_id < buffers[0].length; buffer_id++) {
+            for (let i = 0; i < buffers[0][buffer_id].length; i++) {
                 csv_rows.push(
                     `${buffers[0][buffer_id][i]},${buffers[1][buffer_id][i]}`,
                 )

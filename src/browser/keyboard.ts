@@ -323,10 +323,10 @@ export class KeyboardAdapter {
         }
 
         this.blur_handler = (_e: FocusEvent) => {
-            var keys = Object.keys(this.keys_pressed)
+            const keys = Object.keys(this.keys_pressed)
 
-            for (var i = 0; i < keys.length; i++) {
-                var key = +keys[i]
+            for (let i = 0; i < keys.length; i++) {
+                const key = +keys[i]
 
                 if (this.keys_pressed[key]) {
                     this.handle_code(key, false)
@@ -348,7 +348,7 @@ export class KeyboardAdapter {
             switch (e.inputType) {
                 case 'insertText':
                     if (e.data) {
-                        for (var i = 0; i < e.data.length; i++) {
+                        for (let i = 0; i < e.data.length; i++) {
                             this.simulate_char(e.data[i])
                         }
                     }
@@ -372,7 +372,7 @@ export class KeyboardAdapter {
             window.removeEventListener('keyup', this.keyup_handler, false)
             window.removeEventListener('keydown', this.keydown_handler, false)
             window.removeEventListener('blur', this.blur_handler, false)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             window.removeEventListener(
                 'input',
                 this.input_handler as any,
@@ -390,18 +390,18 @@ export class KeyboardAdapter {
         window.addEventListener('keyup', this.keyup_handler, false)
         window.addEventListener('keydown', this.keydown_handler, false)
         window.addEventListener('blur', this.blur_handler, false)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         window.addEventListener('input', this.input_handler as any, false)
     }
 
     simulate_press(code: number): void {
-        var ev = { keyCode: code } as KeyboardEvent
+        const ev = { keyCode: code } as KeyboardEvent
         this.handler(ev, true)
         this.handler(ev, false)
     }
 
     simulate_char(chr: string): void {
-        var code = chr.charCodeAt(0)
+        const code = chr.charCodeAt(0)
 
         if (code in this.asciimap) {
             this.simulate_press(this.asciimap[code])
@@ -415,7 +415,7 @@ export class KeyboardAdapter {
     }
 
     private may_handle(e: Event): boolean {
-        var ke = e as KeyboardEvent
+        const ke = e as KeyboardEvent
         if (
             ke.shiftKey &&
             ke.ctrlKey &&
@@ -429,7 +429,7 @@ export class KeyboardAdapter {
         }
 
         if (e.target) {
-            var target = e.target as HTMLElement
+            const target = e.target as HTMLElement
             return (
                 target.classList.contains('phone_keyboard') ||
                 (target.nodeName !== 'INPUT' && target.nodeName !== 'TEXTAREA')
@@ -441,7 +441,7 @@ export class KeyboardAdapter {
 
     private translate(e: KeyboardEvent): number {
         if (e.code !== undefined) {
-            var code = this.codemap[e.code]
+            const code = this.codemap[e.code]
 
             if (code !== undefined) {
                 return code
@@ -469,7 +469,9 @@ export class KeyboardAdapter {
             return
         }
 
-        e.preventDefault && e.preventDefault()
+        if (e.preventDefault) {
+            e.preventDefault()
+        }
 
         if (PLATFORM_WINDOWS) {
             if (this.deferred_event) {
@@ -512,7 +514,7 @@ export class KeyboardAdapter {
     }
 
     private handle_event(e: KeyboardEvent, keydown: boolean): void {
-        var code = this.translate(e)
+        const code = this.translate(e)
 
         if (!code) {
             console.log(

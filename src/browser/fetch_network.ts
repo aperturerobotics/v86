@@ -9,11 +9,7 @@ import {
     fake_tcp_probe,
 } from './fake_network.js'
 
-import type {
-    EthEncoderBuf,
-    NetworkAdapterLike,
-    PacketSpec,
-} from './fake_network.js'
+import type { EthEncoderBuf, NetworkAdapterLike } from './fake_network.js'
 
 import { BusConnector } from '../bus.js'
 
@@ -149,7 +145,7 @@ export class FetchNetworkAdapter implements NetworkAdapterLike {
         status_text: string,
         headers: Headers,
     ): Uint8Array {
-        let lines = [`HTTP/1.1 ${status_code} ${status_text}`]
+        const lines = [`HTTP/1.1 ${status_code} ${status_text}`]
 
         for (const [key, value] of headers.entries()) {
             lines.push(`${key}: ${value}`)
@@ -227,12 +223,12 @@ async function on_data_http(
     this.read = this.read || ''
     this.read += new TextDecoder().decode(data)
     if (this.read && this.read.indexOf('\r\n\r\n') !== -1) {
-        let offset = this.read.indexOf('\r\n\r\n')
-        let headers = this.read.substring(0, offset).split(/\r\n/)
-        let body = this.read.substring(offset + 4)
+        const offset = this.read.indexOf('\r\n\r\n')
+        const headers = this.read.substring(0, offset).split(/\r\n/)
+        const body = this.read.substring(offset + 4)
         this.read = ''
 
-        let first_line = headers[0].split(' ')
+        const first_line = headers[0].split(' ')
         let target: URL
         if (/^https?:/.test(first_line[1])) {
             // HTTP proxy
@@ -251,7 +247,7 @@ async function on_data_http(
 
         const net = this.net as FetchNetworkAdapter
 
-        let req_headers = new Headers()
+        const req_headers = new Headers()
         for (let i = 1; i < headers.length; ++i) {
             const header = net.parse_http_header(headers[i])
             if (!header) {
@@ -292,7 +288,7 @@ async function on_data_http(
 
         dbg_log('HTTP Dispatch: ' + target.href, LOG_FETCH)
         this.name = target.href
-        let opts: RequestInit = {
+        const opts: RequestInit = {
             method: first_line[0],
             headers: req_headers,
         }
@@ -304,8 +300,8 @@ async function on_data_http(
             ? net.cors_proxy + encodeURIComponent(target.href)
             : target.href
         let response_started = false
-        let handler = (resp: Response) => {
-            let resp_headers = new Headers(resp.headers)
+        const handler = (resp: Response) => {
+            const resp_headers = new Headers(resp.headers)
             resp_headers.delete('content-encoding')
             resp_headers.delete('keep-alive')
             resp_headers.delete('content-length')

@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { LOG_SERIAL } from './const.js'
 import { h } from './lib.js'
@@ -23,7 +23,7 @@ const UART_IIR_MSI = 0x00 /* Modem status interrupt (Low priority) */
 const UART_IIR_NO_INT = 0x01
 const UART_IIR_THRI = 0x02 /* Transmitter holding register empty */
 const UART_IIR_RDI = 0x04 /* Receiver data interrupt */
-const UART_IIR_RLSI = 0x06 /* Receiver line status interrupt (High p.) */
+const _UART_IIR_RLSI = 0x06 /* Receiver line status interrupt (High p.) */
 const UART_IIR_CTI = 0x0c /* Character timeout */
 
 // Modem control register
@@ -221,7 +221,7 @@ export class UART {
             this,
         )
 
-        var io = cpu.io
+        const io = cpu.io
 
         io.register_write(
             port,
@@ -286,7 +286,7 @@ export class UART {
         })
 
         io.register_read(port | 2, this, (): number => {
-            var ret = this.iir & 0xf
+            let ret = this.iir & 0xf
             dbg_log('read interrupt identification: ' + h(this.iir), LOG_SERIAL)
 
             if (this.iir === UART_IIR_THRI) {
@@ -347,7 +347,7 @@ export class UART {
     }
 
     get_state(): UARTState {
-        var state: UARTState = [
+        const state: UARTState = [
             this.ints,
             this.baud_rate,
             this.line_control,
@@ -440,12 +440,13 @@ export class UART {
         }
 
         if (DEBUG) {
-            var char = String.fromCharCode(out_byte)
+            const char = String.fromCharCode(out_byte)
             this.current_line += char
 
             if (char === '\n') {
                 const line = this.current_line
                     .trimRight()
+                    // eslint-disable-next-line no-control-regex
                     .replace(/[\x00-\x08\x0b-\x1f\x7f\x80-\xff]/g, '')
                 dbg_log('SERIAL: ' + line)
                 this.current_line = ''

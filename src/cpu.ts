@@ -106,7 +106,6 @@ const DUMP_UNCOMPILED_ASSEMBLY = false
 type MmapReadFn = (addr: number) => number
 type MmapWriteFn = (addr: number, value: number) => void
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface CPUDevices {
     pci: PCI
     acpi: ACPI
@@ -120,12 +119,12 @@ interface CPUDevices {
     uart3: UART
     fdc: FloppyController
     ide: IDEController
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     cdrom: any
     pit: PIT
     net: Ne2k
     sb16: SB16
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     virtio_9p: any
     virtio_console: VirtioConsole
     virtio_net: VirtioNet
@@ -137,15 +136,12 @@ interface OptionRom {
     data: Uint8Array
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface WasmModule {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     exports: Record<string, any>
     wasm_table: WebAssembly.Table
 }
 
 export class CPU {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     stop_idling: () => void
     wm: WasmModule
     wasm_memory!: WebAssembly.Memory
@@ -244,7 +240,6 @@ export class CPU {
     svga_dirty_bitmap_min_offset!: Int32Array
     svga_dirty_bitmap_max_offset!: Int32Array
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fw_value: any
     fw_pointer: number
     option_roms: OptionRom[]
@@ -253,15 +248,14 @@ export class CPU {
 
     bus: BusConnector
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     jit_imports!: Record<string, any>
 
     // Debug-only properties
     seen_code!: Record<number, number>
     seen_code_uncompiled!: Record<number, number>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     capstone_decoder?: any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     wabt?: any
 
     // Test hooks (optional)
@@ -274,7 +268,6 @@ export class CPU {
     get_eflags!: () => number
     handle_irqs!: () => void
     main_loop!: () => number
-    reboot_internal!: () => void
     set_jit_config!: (a: number, b: number) => void
 
     read8!: (addr: number) => number
@@ -617,8 +610,6 @@ export class CPU {
 
         this.main_loop = get_import('main_loop')
 
-        this.reboot_internal = get_import('reboot_internal')
-
         this.set_jit_config = get_import('set_jit_config')
 
         this.read8 = get_import('read8')
@@ -711,9 +702,7 @@ export class CPU {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[] {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const state: any[] = []
 
         state[0] = this.memory_size[0]
@@ -824,7 +813,6 @@ export class CPU {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state_pic(): any[] {
         const pic_size = 13
         const pic = new Uint8Array(
@@ -838,9 +826,8 @@ export class CPU {
             pic_size,
         )
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const state: any[] = []
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const state_slave: any[] = []
 
         state[0] = pic[0] // irq_mask
@@ -892,7 +879,6 @@ export class CPU {
         )
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.memory_size[0] = state[0]
 
@@ -974,7 +960,6 @@ export class CPU {
         if (state[56] || state[57]) {
             // ide device from older version of v86, only primary: state[56] contains cdrom, state[57] contains hard drive
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ide_config: any = [
                 [undefined, undefined],
                 [undefined, undefined],
@@ -1053,7 +1038,6 @@ export class CPU {
         this.jit_clear_cache()
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state_pic(state: any[]): void {
         // Note: This could exists for compatibility with old state images
         // It should be deleted when the state version changes
@@ -1099,7 +1083,6 @@ export class CPU {
         pic_slave[12] = state_slave[12] // special_mask_mode (undefined in old state images)
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state_apic(state: any): void {
         const APIC_STRUCT_SIZE = 4 * 46 // keep in sync with apic.rs
         const IOAPIC_CONFIG_MASKED = 1 << 16
@@ -1146,7 +1129,6 @@ export class CPU {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state_ioapic(state: any): void {
         const IOAPIC_STRUCT_SIZE = 4 * 52 // keep in sync with ioapic.rs
 
@@ -1275,7 +1257,6 @@ export class CPU {
         )
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     init(settings: any, device_bus: BusConnector): void {
         this.create_memory(
             settings.memory_size || 64 * 1024 * 1024,
@@ -1478,7 +1459,6 @@ export class CPU {
                 settings.fdb,
             )
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ide_config: any = [
                 [undefined, undefined],
                 [undefined, undefined],
@@ -1985,7 +1965,6 @@ export class CPU {
         return undefined
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fill_cmos(rtc: RTC, settings: any): void {
         const boot_order = settings.boot_order || BOOT_ORDER_CD_FIRST
 
@@ -2808,7 +2787,6 @@ export class CPU {
         if (!DEBUG) return
 
         if (!this.capstone_decoder) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let cs = (globalThis as any).cs
 
             if (typeof require === 'function') {
@@ -2839,7 +2817,6 @@ export class CPU {
                 start,
             )
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             instructions.forEach(function (instr: any) {
                 dbg_log(
                     h(instr.address >>> 0) +
@@ -2875,7 +2852,6 @@ export class CPU {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 this.wabt = require('./libwabt.cjs')
             } else {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 this.wabt = new (globalThis as any).WabtModule()
             }
 
@@ -2889,7 +2865,6 @@ export class CPU {
         // the whole underlying buffer
         buffer = buffer.slice()
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let module: any
         try {
             module = this.wabt.readWasm(buffer, { readDebugNames: false })

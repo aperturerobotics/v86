@@ -1,8 +1,8 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { V86 } from './starter.js'
 import { LOG_NAMES } from '../const.js'
-import { SyncBuffer, SyncFileBuffer } from '../buffer.js'
+import { SyncFileBuffer } from '../buffer.js'
 import {
     h,
     pad0,
@@ -37,8 +37,9 @@ function query_append(): string {
 function set_title(text: string): void {
     document.title = text + ' - v86' + (DEBUG ? ' - debug' : '')
     const description = document.querySelector('meta[name=description]')
-    description &&
-        ((description as HTMLMetaElement).content = 'Running ' + text)
+    if (description) {
+        ;(description as HTMLMetaElement).content = 'Running ' + text
+    }
 }
 
 function bool_arg(x: string | null): boolean {
@@ -73,7 +74,6 @@ function read_file(file: File): Promise<ArrayBuffer | string | null> {
 
 let progress_ticks = 0
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function show_progress(e: any): void {
     const el = $('loading')!
     ;(el as HTMLElement).style.display = 'block'
@@ -99,10 +99,10 @@ function show_progress(e: any): void {
     }
 
     if (e.total && typeof e.loaded === 'number') {
-        var per100 = Math.floor((e.loaded / e.total) * 100)
+        let per100 = Math.floor((e.loaded / e.total) * 100)
         per100 = Math.min(100, Math.max(0, per100))
 
-        var per50 = Math.floor(per100 / 2)
+        const per50 = Math.floor(per100 / 2)
 
         line += per100 + '% ['
         line += '#'.repeat(per50)
@@ -130,14 +130,15 @@ const elements_to_restore = [
 for (const item of elements_to_restore) {
     try {
         window.localStorage.removeItem(item)
-    } catch (_e) {}
+    } catch {
+        // intentionally empty
+    }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface OSProfile {
     id: string
     name: string
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     [key: string]: any
 }
 
@@ -1739,9 +1740,8 @@ function onload(): void {
         fetch(base + '/profile.json')
             .catch((_e) => alert('Profile not found: ' + profile))
             .then((response) => (response as Response).json())
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             .then((p: any) => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 function handle_image(o: any) {
                     return (
                         o && {
@@ -1820,7 +1820,7 @@ function onload(): void {
                 if (n_sect === 2880) {
                     option.selected = true
                 }
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
                 ;(option as any).value = n_bytes
                 select.appendChild(option)
             }
@@ -1851,11 +1851,10 @@ function onload(): void {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const os_info = Array.from(document.querySelectorAll('#oses a.tr')).map(
         (element) => {
             const match =
-                element.children[1].textContent!.match(/([\d\.]+)\+? (\w+)/)!
+                element.children[1].textContent!.match(/([\d.]+)\+? (\w+)/)!
             const [_, size_raw, unit] = match
             let size = +size_raw
             if (unit === 'MB') size *= 1024 * 1024
@@ -2033,7 +2032,7 @@ function debug_onload(): void {
         if (LOG_LEVEL & (mask as number)) {
             input.checked = true
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         ;(input as any).mask = mask
 
         label.append(input, pads(name, 4) + ' ')
@@ -2046,7 +2045,7 @@ function debug_onload(): void {
 
     log_levels.onchange = function (e) {
         const target = e.target as HTMLInputElement
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const mask = (target as any).mask as number
 
         if (target.checked) {
@@ -2079,7 +2078,7 @@ if (document.readyState === 'complete') {
 // - the user clicked on a profile
 // - the ?profile= query parameter specified a valid profile
 // - the ?profile= query parameter was set to "custom" and at least one disk image was given
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function start_emulation(
     profile: OSProfile | null,
     query_args: URLSearchParams | null,
@@ -2089,7 +2088,6 @@ function start_emulation(
     const new_query_args = new Map<string, string>()
     new_query_args.set('profile', profile?.id || 'custom')
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const settings: any = {}
 
     if (profile) {
@@ -2248,8 +2246,9 @@ function start_emulation(
         if (fda) {
             settings.fda = { buffer: fda }
         }
-        const fda_empty_size = +($('fda_empty_size') as HTMLInputElement | null)
-            ?.value!
+        const fda_empty_size = +(
+            ($('fda_empty_size') as HTMLInputElement | null)?.value ?? ''
+        )
         if (fda_empty_size) {
             settings.fda = { buffer: new ArrayBuffer(fda_empty_size) }
         }
@@ -2257,8 +2256,9 @@ function start_emulation(
         if (fdb) {
             settings.fdb = { buffer: fdb }
         }
-        const fdb_empty_size = +($('fdb_empty_size') as HTMLInputElement | null)
-            ?.value!
+        const fdb_empty_size = +(
+            ($('fdb_empty_size') as HTMLInputElement | null)?.value ?? ''
+        )
         if (fdb_empty_size) {
             settings.fdb = { buffer: new ArrayBuffer(fdb_empty_size) }
         }
@@ -2270,8 +2270,9 @@ function start_emulation(
         if (hda) {
             settings.hda = { buffer: hda }
         }
-        const hda_empty_size = +($('hda_empty_size') as HTMLInputElement | null)
-            ?.value!
+        const hda_empty_size = +(
+            ($('hda_empty_size') as HTMLInputElement | null)?.value ?? ''
+        )
         if (hda_empty_size) {
             const size =
                 Math.max(
@@ -2287,8 +2288,9 @@ function start_emulation(
         if (hdb) {
             settings.hdb = { buffer: hdb }
         }
-        const hdb_empty_size = +($('hdb_empty_size') as HTMLInputElement | null)
-            ?.value!
+        const hdb_empty_size = +(
+            ($('hdb_empty_size') as HTMLInputElement | null)?.value ?? ''
+        )
         if (hdb_empty_size) {
             const size =
                 Math.max(
@@ -2441,7 +2443,6 @@ function start_emulation(
         cpuid_level: settings.cpuid_level,
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (DEBUG) (window as any).emulator = emulator
 
     emulator.add_listener('emulator-ready', function () {
@@ -2463,7 +2464,9 @@ function start_emulation(
 
                     panel.textContent = emulator.get_instruction_stats()
 
-                    CLEAR_STATS && emulator.v86.cpu.clear_opstats()
+                    if (CLEAR_STATS) {
+                        emulator.v86.cpu.clear_opstats()
+                    }
                 },
                 CLEAR_STATS ? 5000 : 1000,
             )
@@ -2478,7 +2481,7 @@ function start_emulation(
                 'redox',
                 'beos',
                 '9legacy',
-            ].includes(profile?.id!)
+            ].includes(profile?.id ?? '')
         ) {
             setTimeout(() => {
                 // hack: Start automatically
@@ -2516,12 +2519,10 @@ function start_emulation(
         }
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emulator.add_listener('download-progress', function (e: any) {
         show_progress(e)
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emulator.add_listener('download-error', function (e: any) {
         const el = $('loading')!
         el.style.display = 'block'
@@ -2529,7 +2530,6 @@ function start_emulation(
     })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function init_ui(
     profile: OSProfile | null,
     settings: any,
@@ -2540,7 +2540,7 @@ function init_ui(
     $('runtime_infos')!.style.display = 'block'
     $('screen_container')!.style.display = 'block'
 
-    var filesystem_is_enabled = false
+    let filesystem_is_enabled = false
 
     if (settings.filesystem) {
         filesystem_is_enabled = true
@@ -2580,7 +2580,7 @@ function init_ui(
         ;($('lock_mouse') as HTMLElement).blur()
     }
 
-    var mouse_is_enabled = true
+    let mouse_is_enabled = true
 
     $('toggle_mouse')!.onclick = function () {
         mouse_is_enabled = !mouse_is_enabled
@@ -2595,9 +2595,9 @@ function init_ui(
         ;($('toggle_mouse') as HTMLElement).click()
     }
 
-    var theatre_mode = false
-    var theatre_ui = true
-    var theatre_zoom_to_fit = false
+    let theatre_mode = false
+    let theatre_ui = true
+    let theatre_zoom_to_fit = false
 
     function zoom_to_fit(): void {
         // reset size
@@ -2697,28 +2697,28 @@ function init_ui(
         ;($('toggle_zoom_to_fit') as HTMLElement).blur()
     }
 
-    var last_tick = 0
-    var running_time = 0
-    var last_instr_counter = 0
-    var interval: ReturnType<typeof setInterval> | null = null
-    var os_uses_mouse = false
-    var total_instructions = 0
+    let last_tick = 0
+    let running_time = 0
+    let last_instr_counter = 0
+    let interval: ReturnType<typeof setInterval> | null = null
+    let os_uses_mouse = false
+    let total_instructions = 0
 
     function update_info(): void {
-        var now = Date.now()
+        const now = Date.now()
 
-        var instruction_counter = emulator.get_instruction_counter()
+        const instruction_counter = emulator.get_instruction_counter()
 
         if (instruction_counter < last_instr_counter) {
             // 32-bit wrap-around
             last_instr_counter -= 0x100000000
         }
 
-        var last_ips = instruction_counter - last_instr_counter
+        const last_ips = instruction_counter - last_instr_counter
         last_instr_counter = instruction_counter
         total_instructions += last_ips
 
-        var delta_time = now - last_tick
+        const delta_time = now - last_tick
 
         if (delta_time) {
             running_time += delta_time
@@ -2748,13 +2748,12 @@ function init_ui(
         }
     })
 
-    var stats_9p = {
+    const stats_9p = {
         read: 0,
         write: 0,
         files: [] as string[],
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emulator.add_listener('9p-read-start', function (args: any) {
         const file = args[0]
         stats_9p.files.push(file)
@@ -2762,7 +2761,7 @@ function init_ui(
         $('info_filesystem_status')!.textContent = 'Loading ...'
         $('info_filesystem_last_file')!.textContent = file
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emulator.add_listener('9p-read-end', function (args: any) {
         stats_9p.read += args[1]
         $('info_filesystem_bytes_read')!.textContent = String(stats_9p.read)
@@ -2776,7 +2775,7 @@ function init_ui(
             $('info_filesystem_status')!.textContent = 'Idle'
         }
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emulator.add_listener('9p-write-end', function (args: any) {
         stats_9p.write += args[1]
         $('info_filesystem_bytes_written')!.textContent = String(stats_9p.write)
@@ -2786,7 +2785,7 @@ function init_ui(
         }
     })
 
-    var stats_storage = {
+    const stats_storage = {
         read: 0,
         read_sectors: 0,
         write: 0,
@@ -2799,7 +2798,7 @@ function init_ui(
         $('info_storage')!.style.display = 'block'
         $('info_storage_status')!.textContent = 'Loading ...'
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emulator.add_listener('ide-read-end', function (args: any) {
         stats_storage.read += args[1]
         stats_storage.read_sectors += args[2]
@@ -2810,7 +2809,7 @@ function init_ui(
             stats_storage.read_sectors,
         )
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emulator.add_listener('ide-write-end', function (args: any) {
         stats_storage.write += args[1]
         stats_storage.write_sectors += args[2]
@@ -2823,12 +2822,11 @@ function init_ui(
         )
     })
 
-    var stats_net = {
+    const stats_net = {
         bytes_transmitted: 0,
         bytes_received: 0,
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emulator.add_listener('eth-receive-end', function (args: any) {
         stats_net.bytes_received += args[0]
 
@@ -2837,7 +2835,7 @@ function init_ui(
             stats_net.bytes_received,
         )
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     emulator.add_listener('eth-transmit-end', function (args: any) {
         stats_net.bytes_transmitted += args[0]
 
@@ -2852,7 +2850,6 @@ function init_ui(
         $('info_mouse_enabled')!.textContent = is_enabled ? 'Yes' : 'No'
     })
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emulator.add_listener('screen-set-size', function (args: any) {
         const [w, h_val, bpp] = args
         $('info_res')!.textContent = w + 'x' + h_val + (bpp ? 'x' + bpp : '')
@@ -2864,7 +2861,6 @@ function init_ui(
         ;($('reset') as HTMLElement).blur()
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     add_image_download_button(
         settings.hda,
         () => emulator.v86.cpu.devices.ide.primary.master.buffer,
@@ -2891,13 +2887,12 @@ function init_ui(
         'cdrom',
     )
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function add_image_download_button(
         obj: any,
         get_buffer: () => any,
         type: string,
     ): void {
-        var elem = $('get_' + type + '_image')!
+        const elem = $('get_' + type + '_image')!
 
         if (!obj || obj.async) {
             elem.style.display = 'none'
@@ -2913,10 +2908,9 @@ function init_ui(
                     (type === 'cdrom' ? '.iso' : '.img')
 
             if (buffer.get_as_file) {
-                var file = buffer.get_as_file(filename)
+                const file = buffer.get_as_file(filename)
                 download(file, filename)
             } else {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 buffer.get_buffer(function (b: any) {
                     if (b) {
                         dump_file(b, filename)
@@ -2941,7 +2935,6 @@ function init_ui(
                 resolve(file_input.files!)
             }
             file_input.oncancel = function () {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 resolve([] as any)
             }
             file_input.click()
@@ -3105,10 +3098,8 @@ function init_ui(
     capture_traffic_el.onclick = function () {
         capture_traffic_el.textContent = '0 packets'
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let capture: any[] = []
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         function do_capture(direction: string, data: any): void {
             capture.push({
                 direction,
@@ -3126,7 +3117,7 @@ function init_ui(
 
         capture_traffic_el.onclick = function () {
             const capture_raw = capture
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
                 .map(({ direction, time, hex_dump: hd }: any) => {
                     // https://www.wireshark.org/docs/wsug_html_chunked/ChIOImportSection.html
                     // In wireshark: file -> import from hex -> tick direction indication, timestamp %s.%f
@@ -3209,7 +3200,7 @@ function init_ui(
     }
 
     $('scale')!.onchange = function () {
-        var n = parseFloat(($('scale') as HTMLInputElement).value)
+        const n = parseFloat(($('scale') as HTMLInputElement).value)
 
         if (n || n > 0) {
             emulator.screen_set_scale(n, n)
@@ -3261,7 +3252,9 @@ function init_ui(
         try {
             const w = window.open('')!
             w.document.write(image!.outerHTML)
-        } catch (_e) {}
+        } catch {
+            // intentionally empty
+        }
         ;($('take_screenshot') as HTMLElement).blur()
     }
 
@@ -3318,9 +3311,8 @@ function init_filesystem_panel(emulator: V86): void {
     const fs_send_el = $('filesystem_send_file') as HTMLInputElement
     fs_send_el.onchange = function () {
         Array.prototype.forEach.call(fs_send_el.files, function (file: File) {
-            var loader = new SyncFileBuffer(file)
+            const loader = new SyncFileBuffer(file)
             loader.onload = function () {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 loader.get_buffer(async function (buffer: any) {
                     await emulator.create_file(
                         '/' + file.name,
@@ -3353,12 +3345,11 @@ function init_filesystem_panel(emulator: V86): void {
         fs_get_el.disabled = false
 
         if (result) {
-            var filename: string | string[] = fs_get_el.value
+            let filename: string | string[] = fs_get_el.value
                 .replace(/\/$/, '')
                 .split('/')
             filename = filename[filename.length - 1] || 'root'
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             dump_file(result as any, filename)
             fs_get_el.value = ''
         } else {
@@ -3398,11 +3389,8 @@ function debug_start(emulator: V86): void {
     }, 1000)
 
     // helps debugging
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).cpu = cpu
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).h = h
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).dump_file = dump_file
 }
 
@@ -3412,7 +3400,7 @@ function onpopstate(_e: PopStateEvent): void {
 
 function push_state(params: Map<string, string>): void {
     if (window.history.pushState) {
-        let search =
+        const search =
             '?' +
             Array.from(params.entries())
                 .map(

@@ -64,9 +64,9 @@ export function load_kernel(
     const bzimage32 = new Uint32Array(bzimage)
 
     const setup_sects = bzimage8[LINUX_BOOT_HDR_SETUP_SECTS] || 4
-    const syssize = bzimage32[LINUX_BOOT_HDR_SYSSIZE >> 2] << 4
+    const _syssize = bzimage32[LINUX_BOOT_HDR_SYSSIZE >> 2] << 4
 
-    const vidmode = bzimage16[LINUX_BOOT_HDR_VIDMODE >> 1]
+    const _vidmode = bzimage16[LINUX_BOOT_HDR_VIDMODE >> 1]
 
     const checksum1 = bzimage16[LINUX_BOOT_HDR_BOOT_FLAG >> 1]
     if (checksum1 !== LINUX_BOOT_HDR_CHECKSUM1) {

@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { LOG_VIRTIO } from './const.js'
 import { h, int_log2 } from './lib.js'
@@ -85,11 +85,11 @@ export const VIRTIO_F_VERSION_1 = 32
 // Size (bytes) of the virtq_desc struct per queue size.
 const VIRTQ_DESC_ENTRYSIZE = 16
 // Size (bytes) of the virtq_avail struct ignoring ring entries.
-const VIRTQ_AVAIL_BASESIZE = 6
+const _VIRTQ_AVAIL_BASESIZE = 6
 // Size (bytes) of the virtq_avail struct per queue size.
 const VIRTQ_AVAIL_ENTRYSIZE = 2
 // Size (bytes) of the virtq_used struct ignoring ring entries.
-const VIRTQ_USED_BASESIZE = 6
+const _VIRTQ_USED_BASESIZE = 6
 // Size (bytes) of the virtq_desc struct per queue size.
 const VIRTQ_USED_ENTRYSIZE = 8
 // Mask for wrapping the idx field of the virtq_used struct so that the value
@@ -102,7 +102,7 @@ const VIRTQ_DESC_F_NEXT = 1
 const VIRTQ_DESC_F_WRITE = 2
 const VIRTQ_DESC_F_INDIRECT = 4
 const VIRTQ_AVAIL_F_NO_INTERRUPT = 1
-const VIRTQ_USED_F_NO_NOTIFY = 1
+const _VIRTQ_USED_F_NO_NOTIFY = 1
 
 // TypeScript types.
 
@@ -1443,11 +1443,11 @@ export class VirtQueue {
 
             // Fire irq when idx values associated with the pushed reply buffers
             // has reached or gone past used_event.
-            let has_passed = old_idx <= used_event && used_event < new_idx
+            let _has_passed = old_idx <= used_event && used_event < new_idx
 
             // Has overflowed? Assumes num_staged_replies > 0.
             if (new_idx <= old_idx) {
-                has_passed = used_event < new_idx || old_idx <= used_event
+                _has_passed = used_event < new_idx || old_idx <= used_event
             }
 
             // Commented out: Workaround for sometimes loading from the filesystem hangs and the emulator stays idle
@@ -1667,6 +1667,7 @@ export class VirtQueueBufferChain {
             } else {
                 break
             }
+            // eslint-disable-next-line no-constant-condition
         } while (true)
         dbg_log('Descriptor chain end >>>', LOG_VIRTIO)
     }

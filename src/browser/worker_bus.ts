@@ -1,7 +1,7 @@
 import { dbg_assert } from '../log.js'
 
 interface WorkerBusListener {
-    fn: Function
+    fn: (...args: any[]) => any
     this_value: unknown
 }
 
@@ -19,11 +19,11 @@ export class Connector {
         pair.addEventListener(
             'message',
             ((e: Event) => {
-                var data = (e as MessageEvent).data
-                var listeners = this.listeners[data[0]]
+                const data = (e as MessageEvent).data
+                const listeners = this.listeners[data[0]]
 
-                for (var i = 0; i < listeners.length; i++) {
-                    var listener = listeners[i]
+                for (let i = 0; i < listeners.length; i++) {
+                    const listener = listeners[i]
                     listener.fn.call(listener.this_value, data[1])
                 }
             }) satisfies EventListener,
@@ -31,8 +31,12 @@ export class Connector {
         )
     }
 
-    register(name: string, fn: Function, this_value: unknown): void {
-        var listeners = this.listeners[name]
+    register(
+        name: string,
+        fn: (...args: any[]) => any,
+        this_value: unknown,
+    ): void {
+        let listeners = this.listeners[name]
 
         if (listeners === undefined) {
             listeners = this.listeners[name] = []
@@ -55,6 +59,6 @@ export class Connector {
     }
 }
 
-export var init = function (worker: Worker | MessagePort): Connector {
+export const init = function (worker: Worker | MessagePort): Connector {
     return new Connector(worker)
 }

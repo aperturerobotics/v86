@@ -16,6 +16,6 @@
     "lib": ["ES2024", "DOM", "WebWorker"],
     "types": ["node"]
   },
-  "include": ["src", "lib", "gen", "tests"],
+  "include": ["src", "lib", "gen", "tests", "examples", "tools"],
   "exclude": ["node_modules", "dist", "build", "src/rust"]
 }

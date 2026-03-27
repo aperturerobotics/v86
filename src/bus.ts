@@ -1,7 +1,7 @@
 import { dbg_assert } from './log.js'
 
 interface BusListener {
-    fn: Function
+    fn: (...args: any[]) => any
     this_value: unknown
 }
 
@@ -9,8 +9,12 @@ export class BusConnector {
     listeners: Record<string, BusListener[]> = {}
     pair: BusConnector | undefined = undefined
 
-    register(name: string, fn: Function, this_value: unknown): void {
-        var listeners = this.listeners[name]
+    register(
+        name: string,
+        fn: (...args: any[]) => any,
+        this_value: unknown,
+    ): void {
+        let listeners = this.listeners[name]
 
         if (listeners === undefined) {
             listeners = this.listeners[name] = []
@@ -22,8 +26,8 @@ export class BusConnector {
         })
     }
 
-    unregister(name: string, fn: Function): void {
-        var listeners = this.listeners[name]
+    unregister(name: string, fn: (...args: any[]) => any): void {
+        const listeners = this.listeners[name]
 
         if (listeners === undefined) {
             return
@@ -39,14 +43,14 @@ export class BusConnector {
             return
         }
 
-        var listeners = this.pair.listeners[name]
+        const listeners = this.pair.listeners[name]
 
         if (listeners === undefined) {
             return
         }
 
-        for (var i = 0; i < listeners.length; i++) {
-            var listener = listeners[i]
+        for (let i = 0; i < listeners.length; i++) {
+            const listener = listeners[i]
             listener.fn.call(listener.this_value, value)
         }
     }
@@ -59,8 +63,8 @@ export class BusConnector {
 }
 
 export function create_bus(): [BusConnector, BusConnector] {
-    var c0 = new BusConnector()
-    var c1 = new BusConnector()
+    const c0 = new BusConnector()
+    const c1 = new BusConnector()
 
     c0.pair = c1
     c1.pair = c0
@@ -69,6 +73,6 @@ export function create_bus(): [BusConnector, BusConnector] {
 }
 
 // Backwards compatibility: Bus namespace
-export var Bus = {
+export const Bus = {
     create: create_bus,
 }

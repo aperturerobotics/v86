@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { LOG_DISK } from './const.js'
 import { h } from './lib.js'
@@ -19,7 +19,7 @@ interface IDEDiskBuffer {
     byteLength: number
     get(start: number, len: number, fn: (data: Uint8Array) => void): void
     set(start: number, slice: Uint8Array, fn: () => void): void
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     set_state(state: any[]): void
 }
 
@@ -125,8 +125,8 @@ const ATA_ER_ABRT = 0x04 // Command aborted
 // Status register bits:
 const ATA_SR_ERR = 0x01 // Error (ATA)
 const ATA_SR_COND = 0x01 // Check Condition (ATAPI)
-const ATA_SR_SENS = 0x02 // Sense Available (ATAPI)
-const ATA_SR_AERR = 0x04 // Alignment Error
+const _ATA_SR_SENS = 0x02 // Sense Available (ATAPI)
+const _ATA_SR_AERR = 0x04 // Alignment Error
 const ATA_SR_DRQ = 0x08 // Data Request
 const ATA_SR_DSC = 0x10 // Drive Seek Complete / Deferred Write Error
 const ATA_SR_DF = 0x20 // Device Fault / Stream Error
@@ -141,7 +141,7 @@ const ATA_DR_DEV = 0x10 // Device select; slave device if set, else master devic
 // Bits 0x08/0x10/0x20/0x40 are reserved and bit 0x01 is always zero.
 const ATA_CR_NIEN = 0x02 // Interrupt disable (not Interrupt ENable)
 const ATA_CR_SRST = 0x04 // Software reset
-const ATA_CR_HOB = 0x80 // 48-bit Address feature set
+const _ATA_CR_HOB = 0x80 // 48-bit Address feature set
 
 // ATA commands
 const ATA_CMD_DEVICE_RESET = 0x08 // see [ATA8-ACS] 7.6
@@ -240,7 +240,7 @@ const ATAPI_CMD_TEST_UNIT_READY = 0x00 // see [MMC-2] 9.1.20
 // ATAPI command flags
 const ATAPI_CF_NONE = 0x00 // no flags
 const ATAPI_CF_NEEDS_DISK = 0x01 // command needs inserted disk
-const ATAPI_CF_UNIT_ATTN = 0x02 // bounce command if unit attention condition is active
+const _ATAPI_CF_UNIT_ATTN = 0x02 // bounce command if unit attention condition is active
 
 // ATAPI commands, for flags see [MMC-3] 4.2.6
 const ATAPI_CMD: Record<number, { name: string; flags: number }> = {
@@ -306,21 +306,21 @@ const ATAPI_SIGNATURE_LO = 0x14
 const ATAPI_SIGNATURE_HI = 0xeb
 
 // ATAPI 4-bit Sense Keys, see [MMC-2] 9.1.18.3, Table 123
-const ATAPI_SK_NO_SENSE = 0
-const ATAPI_SK_RECOVERED_ERROR = 1
+const _ATAPI_SK_NO_SENSE = 0
+const _ATAPI_SK_RECOVERED_ERROR = 1
 const ATAPI_SK_NOT_READY = 2
-const ATAPI_SK_MEDIUM_ERROR = 3
-const ATAPI_SK_HARDWARE_ERROR = 4
+const _ATAPI_SK_MEDIUM_ERROR = 3
+const _ATAPI_SK_HARDWARE_ERROR = 4
 const ATAPI_SK_ILLEGAL_REQUEST = 5
 const ATAPI_SK_UNIT_ATTENTION = 6
-const ATAPI_SK_DATA_PROTECT = 7
-const ATAPI_SK_BLANK_CHECK = 8
-const ATAPI_SK_ABORTED_COMMAND = 11
+const _ATAPI_SK_DATA_PROTECT = 7
+const _ATAPI_SK_BLANK_CHECK = 8
+const _ATAPI_SK_ABORTED_COMMAND = 11
 
 // ATAPI 8-bit Additional Sense Codes, see [MMC-2] 9.1.18.3, Table 124
 // https://github.com/qemu/qemu/blob/3c5a5e213e5f08fbfe70728237f7799ac70f5b99/hw/ide/ide-internal.h#L288
 const ATAPI_ASC_INV_FIELD_IN_CMD_PACKET = 0x24
-const ATAPI_ASC_MEDIUM_MAY_HAVE_CHANGED = 0x28
+const _ATAPI_ASC_MEDIUM_MAY_HAVE_CHANGED = 0x28
 const ATAPI_ASC_MEDIUM_NOT_PRESENT = 0x3a
 
 // Debug log detail bits (internal to this module)
@@ -330,7 +330,7 @@ const LOG_DETAIL_IRQ = 0x02 // log IRQ raise/lower events
 const LOG_DETAIL_RW = 0x04 // log data read/write-related events
 const LOG_DETAIL_RW_DMA = 0x08 // log DMA data read/write-related events
 const LOG_DETAIL_CHS = 0x10 // log register-CHS to LBA conversions
-const LOG_DETAIL_ALL = 0xff // log all details
+const _LOG_DETAIL_ALL = 0xff // log all details
 // the bitset of active log details (should be 0 when not in DEBUG mode)
 const LOG_DETAILS = DEBUG ? LOG_DETAIL_NONE : 0
 
@@ -614,10 +614,13 @@ export class IDEController {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
-        this.primary && this.primary.set_state(state[0])
-        this.secondary && this.secondary.set_state(state[1])
+        if (this.primary) {
+            this.primary.set_state(state[0])
+        }
+        if (this.secondary) {
+            this.secondary.set_state(state[1])
+        }
     }
 }
 
@@ -1006,7 +1009,9 @@ class IDEChannel {
             (data: number) => this.dma_set_addr(data),
         )
 
-        DEBUG && Object.seal(this)
+        if (DEBUG) {
+            Object.seal(this)
+        }
     }
 
     read_status(): number {
@@ -1182,7 +1187,7 @@ class IDEChannel {
     }
 
     get_state(): unknown[] {
-        var state: unknown[] = []
+        const state: unknown[] = []
         state[0] = this.master
         state[1] = this.slave
         state[2] = this.command_base
@@ -1199,7 +1204,6 @@ class IDEChannel {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.master.set_state(state[0])
         this.slave.set_state(state[1])
@@ -1508,7 +1512,7 @@ class IDEInterface {
                 break
 
             case ATA_CMD_READ_NATIVE_MAX_ADDRESS: {
-                var last_sector = this.sector_count - 1
+                const last_sector = this.sector_count - 1
                 this.lba_low_reg = last_sector & 0xff
                 this.lba_mid_reg = (last_sector >> 8) & 0xff
                 this.lba_high_reg = (last_sector >> 16) & 0xff
@@ -1520,7 +1524,7 @@ class IDEInterface {
             }
 
             case ATA_CMD_READ_NATIVE_MAX_ADDRESS_EXT: {
-                var last_sector = this.sector_count - 1
+                const last_sector = this.sector_count - 1
                 this.lba_low_reg = last_sector & 0xff
                 this.lba_mid_reg = (last_sector >> 8) & 0xff
                 this.lba_high_reg = (last_sector >> 16) & 0xff
@@ -1798,7 +1802,7 @@ class IDEInterface {
                 break
 
             case ATAPI_CMD_INQUIRY: {
-                var length = this.data[4]
+                const length = this.data[4]
                 this.status_reg = ATA_SR_DRDY | ATA_SR_DSC | ATA_SR_DRQ
                 dbg_log_extra =
                     'lun=' + h(this.data[1], 2) + ' length=' + length
@@ -1833,7 +1837,7 @@ class IDEInterface {
                 break
 
             case ATAPI_CMD_READ_CAPACITY: {
-                var count = this.sector_count - 1
+                const count = this.sector_count - 1
                 this.data_set(
                     new Uint8Array([
                         (count >> 24) & 0xff,
@@ -1862,7 +1866,7 @@ class IDEInterface {
                 break
 
             case ATAPI_CMD_READ_SUBCHANNEL: {
-                var length = this.data[8]
+                const length = this.data[8]
                 dbg_log_extra = 'length=' + length
                 this.data_allocate(Math.min(8, length))
                 this.data_end = this.data_length
@@ -1871,8 +1875,8 @@ class IDEInterface {
             }
 
             case ATAPI_CMD_READ_TOC_PMA_ATIP: {
-                var length = this.data[8] | (this.data[7] << 8)
-                var format = this.data[9] >> 6
+                const length = this.data[8] | (this.data[7] << 8)
+                const format = this.data[9] >> 6
                 dbg_log_extra = `${h(format, 2)} length=${length} ${!!(this.data[1] & 2)} ${h(this.data[6])}`
 
                 this.data_allocate(length)
@@ -1934,7 +1938,7 @@ class IDEInterface {
             }
 
             case ATAPI_CMD_GET_CONFIGURATION: {
-                var length = Math.min(this.data[8] | (this.data[7] << 8), 32)
+                const length = Math.min(this.data[8] | (this.data[7] << 8), 32)
                 dbg_log_extra = 'length=' + length
                 this.data_allocate(length)
                 this.data_end = this.data_length
@@ -1963,8 +1967,8 @@ class IDEInterface {
                 break
 
             case ATAPI_CMD_MODE_SENSE_10: {
-                var length = this.data[8] | (this.data[7] << 8)
-                var page_code = this.data[2]
+                const length = this.data[8] | (this.data[7] << 8)
+                const page_code = this.data[2]
                 dbg_log_extra =
                     'page_code=' + h(page_code) + ' length=' + length
                 if (page_code === 0x2a) {
@@ -1983,7 +1987,7 @@ class IDEInterface {
                 break
 
             case ATAPI_CMD_START_STOP_UNIT: {
-                var loej_start = this.data[4] & 0x3
+                const loej_start = this.data[4] & 0x3
                 dbg_log_extra = `Immed=${h(this.data[1] & 1)} LoEj/Start=${h(loej_start)}`
                 if (this.buffer && loej_start === 0x2) {
                     dbg_log_extra += ': disk ejected'
@@ -2074,7 +2078,7 @@ class IDEInterface {
         this.status_reg = ATA_SR_DRDY | ATA_SR_DSC
 
         dbg_assert(this.data_length <= this.data.length)
-        var data = this.data.subarray(0, this.data_length)
+        const data = this.data.subarray(0, this.data_length)
 
         //dbg_log(hex_dump(data), LOG_DISK);
         dbg_assert(this.data_length % 512 === 0)
@@ -2088,15 +2092,15 @@ class IDEInterface {
 
     atapi_read(cmd: Uint8Array): void {
         // Note: Big Endian
-        var lba = (cmd[2] << 24) | (cmd[3] << 16) | (cmd[4] << 8) | cmd[5]
-        var count =
+        const lba = (cmd[2] << 24) | (cmd[3] << 16) | (cmd[4] << 8) | cmd[5]
+        let count =
             cmd[0] === ATAPI_CMD_READ_12
                 ? (cmd[6] << 24) | (cmd[7] << 16) | (cmd[8] << 8) | cmd[9]
                 : (cmd[7] << 8) | cmd[8]
         count >>>= 0
-        var flags = cmd[1]
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const flags = cmd[1]
+        let byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         if (LOG_DETAILS & LOG_DETAIL_RW) {
             dbg_log(
@@ -2114,7 +2118,7 @@ class IDEInterface {
         }
 
         this.data_length = 0
-        var req_length =
+        let req_length =
             ((this.lba_high_reg << 8) & 0xff00) | (this.lba_mid_reg & 0xff)
         //dbg_log(this.name + ": " + h(this.lba_high_reg, 2) + " " + h(this.lba_mid_reg, 2), LOG_DISK);
         this.lba_mid_reg = this.lba_high_reg = 0 // oak technology driver (windows 3.0)
@@ -2179,15 +2183,15 @@ class IDEInterface {
 
     atapi_read_dma(cmd: Uint8Array): void {
         // Note: Big Endian
-        var lba = (cmd[2] << 24) | (cmd[3] << 16) | (cmd[4] << 8) | cmd[5]
-        var count =
+        const lba = (cmd[2] << 24) | (cmd[3] << 16) | (cmd[4] << 8) | cmd[5]
+        let count =
             cmd[0] === ATAPI_CMD_READ_12
                 ? (cmd[6] << 24) | (cmd[7] << 16) | (cmd[8] << 8) | cmd[9]
                 : (cmd[7] << 8) | cmd[8]
         count >>>= 0
-        var flags = cmd[1]
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const flags = cmd[1]
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         dbg_log(
             this.name +
@@ -2249,15 +2253,16 @@ class IDEInterface {
             )
         }
 
-        var prdt_start = this.channel.prdt_addr
-        var offset = 0
+        let prdt_start = this.channel.prdt_addr
+        let offset = 0
 
-        var data = this.data
+        const data = this.data
 
+        let end: number
         do {
-            var addr = this.cpu.read32s(prdt_start)
-            var count = this.cpu.read16(prdt_start + 4)
-            var end = this.cpu.read8(prdt_start + 7) & 0x80
+            const addr = this.cpu.read32s(prdt_start)
+            let count = this.cpu.read16(prdt_start + 4)
+            end = this.cpu.read8(prdt_start + 7) & 0x80
 
             if (!count) {
                 count = 0x10000
@@ -2323,7 +2328,7 @@ class IDEInterface {
                 h(this.data_pointer) + ' ' + length,
             )
 
-            var result: number
+            let result: number
             if (length === 1) {
                 result = this.data[this.data_pointer]
             } else if (length === 2) {
@@ -2334,7 +2339,7 @@ class IDEInterface {
 
             this.data_pointer += length
 
-            var align = (this.data_end & 0xfff) === 0 ? 0xfff : 0xff
+            const align = (this.data_end & 0xfff) === 0 ? 0xfff : 0xff
 
             if (LOG_DETAILS & LOG_DETAIL_RW) {
                 if ((this.data_pointer & align) === 0) {
@@ -2390,7 +2395,7 @@ class IDEInterface {
                 this.status_reg = ATA_SR_DRDY | ATA_SR_DSC | ATA_SR_DRQ
                 this.sector_count_reg = (this.sector_count_reg & ~7) | 2
                 this.push_irq()
-                var byte_count =
+                const byte_count =
                     ((this.lba_high_reg << 8) & 0xff00) |
                     (this.lba_mid_reg & 0xff)
 
@@ -2414,7 +2419,7 @@ class IDEInterface {
             if (this.data_pointer >= this.data_length) {
                 this.status_reg = ATA_SR_DRDY | ATA_SR_DSC
             } else {
-                var sector_count: number
+                let sector_count: number
                 if (
                     this.current_command === ATA_CMD_READ_MULTIPLE ||
                     this.current_command === ATA_CMD_READ_MULTIPLE_EXT
@@ -2454,7 +2459,7 @@ class IDEInterface {
                 LOG_DISK,
             )
         } else {
-            var align = (this.data_end & 0xfff) === 0 ? 0xfff : 0xff
+            const align = (this.data_end & 0xfff) === 0 ? 0xfff : 0xff
             if (LOG_DETAILS & LOG_DETAIL_RW) {
                 if (
                     ((this.data_pointer + length) & align) === 0 ||
@@ -2549,6 +2554,7 @@ class IDEInterface {
         }
         this.sector_count_reg -= sectors
 
+        let new_sector: number
         if (
             cmd === ATA_CMD_READ_SECTORS_EXT ||
             cmd === ATA_CMD_READ_MULTIPLE ||
@@ -2557,22 +2563,22 @@ class IDEInterface {
             cmd === ATA_CMD_WRITE_MULTIPLE ||
             cmd === ATA_CMD_WRITE_DMA_EXT
         ) {
-            var new_sector = sectors + this.get_lba48()
+            new_sector = sectors + this.get_lba48()
             this.lba_low_reg =
                 (new_sector & 0xff) | ((new_sector >> 16) & 0xff00)
             this.lba_mid_reg = (new_sector >> 8) & 0xff
             this.lba_high_reg = (new_sector >> 16) & 0xff
         } else if (this.is_lba) {
-            var new_sector = sectors + this.get_lba28()
+            new_sector = sectors + this.get_lba28()
             this.lba_low_reg = new_sector & 0xff
             this.lba_mid_reg = (new_sector >> 8) & 0xff
             this.lba_high_reg = (new_sector >> 16) & 0xff
             this.head = (this.head & ~0xf) | (new_sector & 0xf)
         } else // chs
         {
-            var new_sector = sectors + this.get_chs()
+            new_sector = sectors + this.get_chs()
 
-            var c =
+            const c =
                 (new_sector / (this.head_count * this.sectors_per_track)) | 0
             this.lba_mid_reg = c & 0xff
             this.lba_high_reg = (c >> 8) & 0xff
@@ -2588,16 +2594,16 @@ class IDEInterface {
     }
 
     ata_read_sectors(cmd: number): void {
-        var is_lba48 =
+        const is_lba48 =
             cmd === ATA_CMD_READ_SECTORS_EXT || cmd === ATA_CMD_READ_MULTIPLE
-        var count = this.get_count(is_lba48)
-        var lba = this.get_lba(is_lba48)
+        const count = this.get_count(is_lba48)
+        const lba = this.get_lba(is_lba48)
 
-        var is_single =
+        const is_single =
             cmd === ATA_CMD_READ_SECTORS || cmd === ATA_CMD_READ_SECTORS_EXT
 
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         if (LOG_DETAILS & LOG_DETAIL_RW) {
             dbg_log(
@@ -2651,12 +2657,12 @@ class IDEInterface {
     }
 
     ata_read_sectors_dma(cmd: number): void {
-        var is_lba48 = cmd === ATA_CMD_READ_DMA_EXT
-        var count = this.get_count(is_lba48)
-        var lba = this.get_lba(is_lba48)
+        const is_lba48 = cmd === ATA_CMD_READ_DMA_EXT
+        const count = this.get_count(is_lba48)
+        const lba = this.get_lba(is_lba48)
 
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         if (LOG_DETAILS & LOG_DETAIL_RW_DMA) {
             dbg_log(
@@ -2688,20 +2694,20 @@ class IDEInterface {
     }
 
     do_ata_read_sectors_dma(): void {
-        var cmd = this.current_command
+        const cmd = this.current_command
 
-        var is_lba48 = cmd === ATA_CMD_READ_DMA_EXT
-        var count = this.get_count(is_lba48)
-        var lba = this.get_lba(is_lba48)
+        const is_lba48 = cmd === ATA_CMD_READ_DMA_EXT
+        const count = this.get_count(is_lba48)
+        const lba = this.get_lba(is_lba48)
 
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         dbg_assert(lba < this.buffer!.byteLength)
 
         this.report_read_start()
 
-        var orig_prdt_start = this.channel.prdt_addr
+        const orig_prdt_start = this.channel.prdt_addr
 
         this.read_buffer(start, byte_count, (data) => {
             if (LOG_DETAILS & LOG_DETAIL_RW_DMA) {
@@ -2710,15 +2716,16 @@ class IDEInterface {
                     LOG_DISK,
                 )
             }
-            var prdt_start = this.channel.prdt_addr
-            var offset = 0
+            let prdt_start = this.channel.prdt_addr
+            let offset = 0
 
             dbg_assert(orig_prdt_start === prdt_start)
 
+            let end: number
             do {
-                var prd_addr = this.cpu.read32s(prdt_start)
-                var prd_count = this.cpu.read16(prdt_start + 4)
-                var end = this.cpu.read8(prdt_start + 7) & 0x80
+                const prd_addr = this.cpu.read32s(prdt_start)
+                let prd_count = this.cpu.read16(prdt_start + 4)
+                end = this.cpu.read8(prdt_start + 7) & 0x80
 
                 if (!prd_count) {
                     prd_count = 0x10000
@@ -2760,16 +2767,16 @@ class IDEInterface {
     }
 
     ata_write_sectors(cmd: number): void {
-        var is_lba48 =
+        const is_lba48 =
             cmd === ATA_CMD_WRITE_SECTORS_EXT || cmd === ATA_CMD_WRITE_MULTIPLE
-        var count = this.get_count(is_lba48)
-        var lba = this.get_lba(is_lba48)
+        const count = this.get_count(is_lba48)
+        const lba = this.get_lba(is_lba48)
 
-        var is_single =
+        const is_single =
             cmd === ATA_CMD_WRITE_SECTORS || cmd === ATA_CMD_WRITE_SECTORS_EXT
 
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         if (LOG_DETAILS & LOG_DETAIL_RW) {
             dbg_log(
@@ -2806,12 +2813,12 @@ class IDEInterface {
     }
 
     ata_write_sectors_dma(cmd: number): void {
-        var is_lba48 = cmd === ATA_CMD_WRITE_DMA_EXT
-        var count = this.get_count(is_lba48)
-        var lba = this.get_lba(is_lba48)
+        const is_lba48 = cmd === ATA_CMD_WRITE_DMA_EXT
+        const count = this.get_count(is_lba48)
+        const lba = this.get_lba(is_lba48)
 
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
         if (LOG_DETAILS & LOG_DETAIL_RW_DMA) {
             dbg_log(
@@ -2843,17 +2850,17 @@ class IDEInterface {
     }
 
     do_ata_write_sectors_dma(): void {
-        var cmd = this.current_command
+        const cmd = this.current_command
 
-        var is_lba48 = cmd === ATA_CMD_WRITE_DMA_EXT
-        var count = this.get_count(is_lba48)
-        var lba = this.get_lba(is_lba48)
+        const is_lba48 = cmd === ATA_CMD_WRITE_DMA_EXT
+        const count = this.get_count(is_lba48)
+        const lba = this.get_lba(is_lba48)
 
-        var byte_count = count * this.sector_size
-        var start = lba * this.sector_size
+        const byte_count = count * this.sector_size
+        const start = lba * this.sector_size
 
-        var prdt_start = this.channel.prdt_addr
-        var offset = 0
+        let prdt_start = this.channel.prdt_addr
+        let offset = 0
 
         if (LOG_DETAILS & LOG_DETAIL_RW_DMA) {
             dbg_log(this.name + ': prdt addr: ' + h(prdt_start, 8), LOG_DISK)
@@ -2861,10 +2868,11 @@ class IDEInterface {
 
         const buffer = new Uint8Array(byte_count)
 
+        let end: number
         do {
-            var prd_addr = this.cpu.read32s(prdt_start)
-            var prd_count = this.cpu.read16(prdt_start + 4)
-            var end = this.cpu.read8(prdt_start + 7) & 0x80
+            const prd_addr = this.cpu.read32s(prdt_start)
+            let prd_count = this.cpu.read16(prdt_start + 4)
+            end = this.cpu.read8(prdt_start + 7) & 0x80
 
             if (!prd_count) {
                 prd_count = 0x10000
@@ -2882,7 +2890,7 @@ class IDEInterface {
                 )
             }
 
-            var slice = this.cpu.mem8.subarray(prd_addr, prd_addr + prd_count)
+            const slice = this.cpu.mem8.subarray(prd_addr, prd_addr + prd_count)
             dbg_assert(slice.length === prd_count)
 
             buffer.set(slice, offset)
@@ -2913,9 +2921,10 @@ class IDEInterface {
     }
 
     get_chs(): number {
-        var c = (this.lba_mid_reg & 0xff) | ((this.lba_high_reg << 8) & 0xff00)
-        var h = this.head
-        var s = this.lba_low_reg & 0xff
+        const c =
+            (this.lba_mid_reg & 0xff) | ((this.lba_high_reg << 8) & 0xff00)
+        const h = this.head
+        const s = this.lba_low_reg & 0xff
 
         if (LOG_DETAILS & LOG_DETAIL_CHS) {
             dbg_log(
@@ -2959,11 +2968,11 @@ class IDEInterface {
 
     get_count(is_lba48: boolean): number {
         if (is_lba48) {
-            var count = this.sector_count_reg
+            let count = this.sector_count_reg
             if (count === 0) count = 0x10000
             return count
         } else {
-            var count = this.sector_count_reg & 0xff
+            let count = this.sector_count_reg & 0xff
             if (count === 0) count = 0x100
             return count
         }
@@ -3372,7 +3381,7 @@ class IDEInterface {
     }
 
     get_state(): unknown[] {
-        var state: unknown[] = []
+        const state: unknown[] = []
         state[0] = this.sector_count_reg
         state[1] = this.cylinder_count
         state[2] = this.lba_high_reg
@@ -3405,7 +3414,6 @@ class IDEInterface {
         return state
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     set_state(state: any[]): void {
         this.sector_count_reg = state[0]
         this.cylinder_count = state[1]
@@ -3437,7 +3445,9 @@ class IDEInterface {
         this.data16 = new Uint16Array(this.data.buffer)
         this.data32 = new Int32Array(this.data.buffer)
 
-        this.buffer && this.buffer.set_state(state[28])
+        if (this.buffer) {
+            this.buffer.set_state(state[28])
+        }
 
         this.drive_connected = this.is_atapi || !!this.buffer
         this.medium_changed = false

@@ -13,7 +13,7 @@ interface PCICpu {
     io: IO
     device_raise_irq(irq: number): void
     device_lower_irq(irq: number): void
-    reboot_internal(): void
+    reboot(): void
 }
 
 // Mirrors IOPortEntry from io.ts (not exported there).
@@ -83,7 +83,7 @@ export class PCI {
 
         this.cpu = cpu
 
-        for (var i = 0; i < 256; i++) {
+        for (let i = 0; i < 256; i++) {
             this.device_spaces[i] = undefined
             this.devices[i] = undefined
         }
@@ -177,7 +177,7 @@ export class PCI {
                     (out_byte & 0x06) === 0x06
                 ) {
                     dbg_log('CPU reboot via PCI')
-                    cpu.reboot_internal()
+                    cpu.reboot()
                     return
                 }
 
@@ -212,7 +212,7 @@ export class PCI {
         // See [make_bios_writable_intel] in src/fw/shadow.c in seabios for details
         const PAM0 = 0x10
 
-        var host_bridge: PCIDevice = {
+        const host_bridge: PCIDevice = {
             pci_id: 0,
             pci_space: [
                 // 00:00.0 Host bridge: Intel Corporation 440FX - 82441FX PMC [Natoma] (rev 02)
@@ -346,9 +346,9 @@ export class PCI {
     }
 
     get_state(): (Int32Array | Uint8Array | undefined)[] {
-        var state: (Int32Array | Uint8Array | undefined)[] = []
+        const state: (Int32Array | Uint8Array | undefined)[] = []
 
-        for (var i = 0; i < 256; i++) {
+        for (let i = 0; i < 256; i++) {
             state[i] = this.device_spaces[i]
         }
 
@@ -361,9 +361,9 @@ export class PCI {
     }
 
     set_state(state: (Int32Array | Uint8Array | undefined)[]): void {
-        for (var i = 0; i < 256; i++) {
-            var device = this.devices[i]
-            var space = state[i]
+        for (let i = 0; i < 256; i++) {
+            const device = this.devices[i]
+            const space = state[i]
 
             if (!device || !space) {
                 if (device) {
@@ -385,16 +385,16 @@ export class PCI {
                 continue
             }
 
-            var space32 = new Int32Array(space.buffer)
+            const space32 = new Int32Array(space.buffer)
 
-            for (var bar_nr = 0; bar_nr < device.pci_bars.length; bar_nr++) {
-                var value = space32[(0x10 >> 2) + bar_nr]
+            for (let bar_nr = 0; bar_nr < device.pci_bars.length; bar_nr++) {
+                const value = space32[(0x10 >> 2) + bar_nr]
 
                 if (value & 1) {
-                    var bar = device.pci_bars[bar_nr]
+                    const bar = device.pci_bars[bar_nr]
                     if (bar) {
-                        var from = bar.original_bar! & ~1 & 0xffff
-                        var to = value & ~1 & 0xffff
+                        const from = bar.original_bar! & ~1 & 0xffff
+                        const to = value & ~1 & 0xffff
                         this.set_io_bars(bar, from, to)
                     }
                 } else {
@@ -402,7 +402,7 @@ export class PCI {
                 }
             }
 
-            var device_space = this.device_spaces[i]
+            const device_space = this.device_spaces[i]
             if (device_space) {
                 device_space.set(new Int32Array(space.buffer))
             }
@@ -415,12 +415,12 @@ export class PCI {
     }
 
     pci_query(): void {
-        var dbg_line = 'query'
+        let dbg_line = 'query'
 
         // Bit | .31                     .0
         // Fmt | EBBBBBBBBDDDDDFFFRRRRRR00
 
-        var bdf = (this.pci_addr[2] << 8) | this.pci_addr[1],
+        const bdf = (this.pci_addr[2] << 8) | this.pci_addr[1],
             addr = this.pci_addr[0] & 0xfc,
             //devfn = bdf & 0xFF,
             //bus = bdf >> 8,
@@ -433,7 +433,7 @@ export class PCI {
         dbg_line += ' dev=' + h(dev, 2)
         dbg_line += ' addr=' + h(addr, 2)
 
-        var device = this.device_spaces[bdf]
+        const device = this.device_spaces[bdf]
 
         if (device !== undefined) {
             this.pci_status32[0] = 0x80000000 | 0
@@ -465,17 +465,17 @@ export class PCI {
     }
 
     pci_write8(address: number, written: number): void {
-        var bdf = (address >> 8) & 0xffff
-        var addr = address & 0xff
+        const bdf = (address >> 8) & 0xffff
+        const addr = address & 0xff
 
-        var device_space = this.device_spaces[bdf]
-        var device = this.devices[bdf]
+        const device_space = this.device_spaces[bdf]
+        const device = this.devices[bdf]
 
         if (!device_space) {
             return
         }
 
-        var space = new Uint8Array(device_space.buffer)
+        const space = new Uint8Array(device_space.buffer)
 
         dbg_assert(
             !((addr >= 0x10 && addr < 0x2c) || (addr >= 0x30 && addr < 0x34)),
@@ -500,17 +500,17 @@ export class PCI {
     pci_write16(address: number, written: number): void {
         dbg_assert((address & 1) === 0)
 
-        var bdf = (address >> 8) & 0xffff
-        var addr = address & 0xff
+        const bdf = (address >> 8) & 0xffff
+        const addr = address & 0xff
 
-        var device_space = this.device_spaces[bdf]
-        var device = this.devices[bdf]
+        const device_space = this.device_spaces[bdf]
+        const device = this.devices[bdf]
 
         if (!device_space) {
             return
         }
 
-        var space = new Uint16Array(device_space.buffer)
+        const space = new Uint16Array(device_space.buffer)
 
         if (addr >= 0x10 && addr < 0x2c) {
             // Bochs bios
@@ -545,19 +545,19 @@ export class PCI {
     pci_write32(address: number, written: number): void {
         dbg_assert((address & 3) === 0)
 
-        var bdf = (address >> 8) & 0xffff
-        var addr = address & 0xff
+        const bdf = (address >> 8) & 0xffff
+        const addr = address & 0xff
 
-        var space = this.device_spaces[bdf]
-        var device = this.devices[bdf]
+        const space = this.device_spaces[bdf]
+        const device = this.devices[bdf]
 
         if (!space) {
             return
         }
 
         if (addr >= 0x10 && addr < 0x28) {
-            var bar_nr = (addr - 0x10) >> 2
-            var bar = device!.pci_bars[bar_nr]
+            const bar_nr = (addr - 0x10) >> 2
+            const bar = device!.pci_bars[bar_nr]
 
             dbg_log(
                 'BAR' +
@@ -582,8 +582,8 @@ export class PCI {
                     'bar size should be power of 2',
                 )
 
-                var space_addr = addr >> 2
-                var type = space[space_addr] & 1
+                const space_addr = addr >> 2
+                const type = space[space_addr] & 1
 
                 if ((written | 3 | (bar.size - 1)) === -1) // size check
                 {
@@ -595,7 +595,7 @@ export class PCI {
                 } else {
                     if (type === 0) {
                         // memory
-                        var original_bar = bar.original_bar!
+                        const original_bar = bar.original_bar!
 
                         if ((written & ~0xf) !== (original_bar & ~0xf)) {
                             // seabios
@@ -614,8 +614,8 @@ export class PCI {
                     // io
                     dbg_assert(type === 1)
 
-                    var from = space[space_addr] & ~1 & 0xffff
-                    var to = written & ~1 & 0xffff
+                    const from = space[space_addr] & ~1 & 0xffff
+                    const to = written & ~1 & 0xffff
                     dbg_log(
                         'io bar changed from ' +
                             h(from >>> 0, 8) +
@@ -690,7 +690,7 @@ export class PCI {
         dbg_assert(device.pci_space !== undefined)
         dbg_assert(device.pci_bars !== undefined)
 
-        var device_id = device.pci_id
+        const device_id = device.pci_id
 
         dbg_log(
             'PCI register bdf=' + h(device_id) + ' (' + device.name + ')',
@@ -710,22 +710,22 @@ export class PCI {
         dbg_assert(device_id < this.devices.length)
 
         // convert bytewise notation from lspci to double words
-        var space = new Int32Array(64)
+        const space = new Int32Array(64)
         space.set(new Int32Array(new Uint8Array(device.pci_space).buffer))
         this.device_spaces[device_id] = space
         this.devices[device_id] = device
 
-        var bar_space = space.slice(4, 10)
+        const bar_space = space.slice(4, 10)
 
-        for (var i = 0; i < device.pci_bars.length; i++) {
-            var bar = device.pci_bars[i]
+        for (let i = 0; i < device.pci_bars.length; i++) {
+            const bar = device.pci_bars[i]
 
             if (!bar) {
                 continue
             }
 
-            var bar_base = bar_space[i]
-            var type = bar_base & 1
+            const bar_base = bar_space[i]
+            const type = bar_base & 1
             dbg_log(
                 'device ' +
                     device.name +
@@ -743,9 +743,9 @@ export class PCI {
                 // memory, not needed currently
             } else {
                 dbg_assert(type === 1)
-                var port = bar_base & ~1
+                const port = bar_base & ~1
 
-                for (var j = 0; j < bar.size; j++) {
+                for (let j = 0; j < bar.size; j++) {
                     bar.entries[j] = this.io.ports[port + j]
                 }
             }
@@ -755,7 +755,7 @@ export class PCI {
     }
 
     set_io_bars(bar: PCIBar, from: number, to: number): void {
-        var count = bar.size
+        const count = bar.size
         dbg_log(
             'Move io bars: from=' +
                 h(from) +
@@ -766,17 +766,17 @@ export class PCI {
             LOG_PCI,
         )
 
-        var ports = this.io.ports
+        const ports = this.io.ports
 
-        for (var i = 0; i < count; i++) {
-            var old_entry = ports[from + i]
+        for (let i = 0; i < count; i++) {
+            const _old_entry = ports[from + i]
 
             if (from + i >= 0x1000) {
                 ports[from + i] = this.io.create_empty_entry()
             }
 
-            var entry = bar.entries![i]
-            var empty_entry = ports[to + i]
+            const entry = bar.entries![i]
+            const empty_entry = ports[to + i]
             dbg_assert(!!entry && !!empty_entry)
 
             if (to + i >= 0x1000) {
@@ -786,13 +786,13 @@ export class PCI {
     }
 
     raise_irq(pci_id: number): void {
-        var space = this.device_spaces[pci_id]
+        const space = this.device_spaces[pci_id]
         dbg_assert(!!space)
 
-        var pin = ((space![0x3c >>> 2] >> 8) & 0xff) - 1
-        var device = ((pci_id >> 3) - 1) & 0xff
-        var parent_pin = (pin + device) & 3
-        var irq = this.isa_bridge_space8[0x60 + parent_pin]
+        const pin = ((space![0x3c >>> 2] >> 8) & 0xff) - 1
+        const device = ((pci_id >> 3) - 1) & 0xff
+        const parent_pin = (pin + device) & 3
+        const irq = this.isa_bridge_space8[0x60 + parent_pin]
 
         //dbg_log("PCI raise irq " + h(irq) + " dev=" + h(device, 2) +
         //        " (" + this.devices[pci_id].name + ")", LOG_PCI);
@@ -800,13 +800,13 @@ export class PCI {
     }
 
     lower_irq(pci_id: number): void {
-        var space = this.device_spaces[pci_id]
+        const space = this.device_spaces[pci_id]
         dbg_assert(!!space)
 
-        var pin = (space![0x3c >>> 2] >> 8) & 0xff
-        var device = (pci_id >> 3) & 0xff
-        var parent_pin = (pin + device - 2) & 3
-        var irq = this.isa_bridge_space8[0x60 + parent_pin]
+        const pin = (space![0x3c >>> 2] >> 8) & 0xff
+        const device = (pci_id >> 3) & 0xff
+        const parent_pin = (pin + device - 2) & 3
+        const irq = this.isa_bridge_space8[0x60 + parent_pin]
 
         //dbg_log("PCI lower irq " + h(irq) + " dev=" + h(device, 2) +
         //        " (" + this.devices[pci_id].name + ")", LOG_PCI);

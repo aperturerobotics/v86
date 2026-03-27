@@ -220,7 +220,7 @@ function gen_instruction_body_after_prefix(
         // instruction with modrm byte where the middle 3 bits encode the instruction
 
         // group by opcode without prefix plus middle bits of modrm byte
-        let cases: Record<number, Readonly<X86Encoding>> = encodings.reduce(
+        const cases: Record<number, Readonly<X86Encoding>> = encodings.reduce(
             (cases_by_opcode: Record<number, Readonly<X86Encoding>>, case_) => {
                 assert(typeof case_.fixed_g === 'number')
                 cases_by_opcode[

@@ -22,21 +22,21 @@ const NE2K_LOG_PACKETS = false
 const E8390_CMD = 0x00 /* The command register (for all pages) */
 
 /* Page 0 register offsets. */
-const EN0_CLDALO = 0x01 /* Low byte of current local dma addr RD */
+const _EN0_CLDALO = 0x01 /* Low byte of current local dma addr RD */
 const EN0_STARTPG = 0x01 /* Starting page of ring bfr WR */
-const EN0_CLDAHI = 0x02 /* High byte of current local dma addr RD */
+const _EN0_CLDAHI = 0x02 /* High byte of current local dma addr RD */
 const EN0_STOPPG = 0x02 /* Ending page +1 of ring bfr WR */
 const EN0_BOUNDARY = 0x03 /* Boundary page of ring bfr RD WR */
 const EN0_TSR = 0x04 /* Transmit status reg RD */
 const EN0_TPSR = 0x04 /* Transmit starting page WR */
-const EN0_NCR = 0x05 /* Number of collision reg RD */
+const _EN0_NCR = 0x05 /* Number of collision reg RD */
 const EN0_TCNTLO = 0x05 /* Low byte of tx byte count WR */
-const EN0_FIFO = 0x06 /* FIFO RD */
+const _EN0_FIFO = 0x06 /* FIFO RD */
 const EN0_TCNTHI = 0x06 /* High byte of tx byte count WR */
 const EN0_ISR = 0x07 /* Interrupt status reg RD WR */
-const EN0_CRDALO = 0x08 /* low byte of current remote dma address RD */
+const _EN0_CRDALO = 0x08 /* low byte of current remote dma address RD */
 const EN0_RSARLO = 0x08 /* Remote start address reg 0 */
-const EN0_CRDAHI = 0x09 /* high byte, current remote dma address RD */
+const _EN0_CRDAHI = 0x09 /* high byte, current remote dma address RD */
 const EN0_RSARHI = 0x09 /* Remote start address reg 1 */
 const EN0_RCNTLO = 0x0a /* Remote byte count reg WR */
 const EN0_RCNTHI = 0x0b /* Remote byte count reg WR */
@@ -55,13 +55,13 @@ const NE_RESET = 0x1f /* Issue a read to reset, a write to clear. */
 /* Bits in EN0_ISR - Interrupt status register */
 const ENISR_RX = 0x01 /* Receiver, no error */
 const ENISR_TX = 0x02 /* Transmitter, no error */
-const ENISR_RX_ERR = 0x04 /* Receiver, with error */
-const ENISR_TX_ERR = 0x08 /* Transmitter, with error */
-const ENISR_OVER = 0x10 /* Receiver overwrote the ring */
-const ENISR_COUNTERS = 0x20 /* Counters need emptying */
+const _ENISR_RX_ERR = 0x04 /* Receiver, with error */
+const _ENISR_TX_ERR = 0x08 /* Transmitter, with error */
+const _ENISR_OVER = 0x10 /* Receiver overwrote the ring */
+const _ENISR_COUNTERS = 0x20 /* Counters need emptying */
 const ENISR_RDC = 0x40 /* remote dma complete */
 const ENISR_RESET = 0x80 /* Reset completed */
-const ENISR_ALL = 0x3f /* Interrupts we will enable */
+const _ENISR_ALL = 0x3f /* Interrupts we will enable */
 
 const ENRSR_RXOK = 0x01 /* Received a good packet */
 
@@ -324,6 +324,7 @@ function dump_packet(packet: Uint8Array, prefix: string): void {
                 )
             }
         } else if (ipv4_proto === 0x01) {
+            // icmp, intentionally empty
         } else {
             dbg_log(
                 prefix +
@@ -338,7 +339,7 @@ function dump_packet(packet: Uint8Array, prefix: string): void {
             )
         }
     } else {
-        const arp_packet = packet.subarray(14)
+        const _arp_packet = packet.subarray(14)
         dbg_log(
             prefix +
                 ' len=' +
@@ -527,7 +528,7 @@ export class Ne2k {
         // The mac the OS thinks it has
         this.mac_address_in_state = null
 
-        for (var i = 0; i < 6; i++) {
+        for (let i = 0; i < 6; i++) {
             this.memory[i << 1] = this.memory[(i << 1) | 1] = this.mac[i]
         }
 
@@ -546,7 +547,7 @@ export class Ne2k {
         this.curpg = START_RX_PAGE
         this.boundary = START_RX_PAGE
 
-        var io = cpu.io
+        const io = cpu.io
 
         io.register_read(
             this.port | E8390_CMD,
@@ -585,8 +586,8 @@ export class Ne2k {
                 }
 
                 if (data_byte & 4) {
-                    var start = this.tpsr << 8
-                    var data: Uint8Array = this.memory.subarray(
+                    const start = this.tpsr << 8
+                    let data: Uint8Array = this.memory.subarray(
                         start,
                         start + this.tcnt,
                     )
@@ -621,7 +622,7 @@ export class Ne2k {
             this.port | EN0_COUNTER0,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 1) {
                     dbg_log('Read mar5', LOG_NET)
                     return this.mar[5]
@@ -636,7 +637,7 @@ export class Ne2k {
             this.port | EN0_COUNTER1,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 1) {
                     dbg_log('Read mar6', LOG_NET)
                     return this.mar[6]
@@ -656,7 +657,7 @@ export class Ne2k {
             this.port | EN0_COUNTER2,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 1) {
                     dbg_log('Read mar7', LOG_NET)
                     return this.mar[7]
@@ -671,7 +672,6 @@ export class Ne2k {
             this.port | NE_RESET,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
                 dbg_log('Read reset', LOG_NET)
                 this.do_interrupt(ENISR_RESET)
                 return 0
@@ -682,7 +682,6 @@ export class Ne2k {
             this.port | NE_RESET,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
                 dbg_log('Write reset: ' + h(data_byte, 2), LOG_NET)
                 //this.isr &= ~ENISR_RESET;
             },
@@ -692,7 +691,7 @@ export class Ne2k {
             this.port | EN0_STARTPG,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     return this.pstart
                 } else if (pg === 1) {
@@ -712,7 +711,7 @@ export class Ne2k {
             this.port | EN0_STARTPG,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('start page: ' + h(data_byte, 2), LOG_NET)
                     this.pstart = data_byte
@@ -735,7 +734,7 @@ export class Ne2k {
             this.port | EN0_STOPPG,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     return this.pstop
                 } else if (pg === 1) {
@@ -755,7 +754,7 @@ export class Ne2k {
             this.port | EN0_STOPPG,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('stop page: ' + h(data_byte, 2), LOG_NET)
                     if (data_byte > this.memory.length >> 8) {
@@ -780,7 +779,7 @@ export class Ne2k {
             this.port | EN0_ISR,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Read isr: ' + h(this.isr, 2), LOG_NET)
                     return this.isr
@@ -798,7 +797,7 @@ export class Ne2k {
             this.port | EN0_ISR,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     // acknowledge interrupts where bit is set
                     dbg_log('Write isr: ' + h(data_byte, 2), LOG_NET)
@@ -817,7 +816,7 @@ export class Ne2k {
             this.port | EN0_TXCR,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     this.txcr = data_byte
                     dbg_log('Write tx config: ' + h(data_byte, 2), LOG_NET)
@@ -837,7 +836,7 @@ export class Ne2k {
             this.port | EN0_DCFG,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Write data configuration: ' + h(data_byte, 2),
@@ -860,7 +859,7 @@ export class Ne2k {
             this.port | EN0_RCNTLO,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Read pg0/0a', LOG_NET)
                     return 0x50
@@ -878,7 +877,7 @@ export class Ne2k {
             this.port | EN0_RCNTLO,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Write remote byte count low: ' + h(data_byte, 2),
@@ -901,7 +900,7 @@ export class Ne2k {
             this.port | EN0_RCNTHI,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Read pg0/0b', LOG_NET)
                     return 0x43
@@ -919,7 +918,7 @@ export class Ne2k {
             this.port | EN0_RCNTHI,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Write remote byte count high: ' + h(data_byte, 2),
@@ -942,7 +941,7 @@ export class Ne2k {
             this.port | EN0_RSARLO,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Read remote start address low', LOG_NET)
                     return this.rsar & 0xff
@@ -961,7 +960,7 @@ export class Ne2k {
             this.port | EN0_RSARLO,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Write remote start address low: ' + h(data_byte, 2),
@@ -984,7 +983,7 @@ export class Ne2k {
             this.port | EN0_RSARHI,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Read remote start address high', LOG_NET)
                     return (this.rsar >> 8) & 0xff
@@ -1003,7 +1002,7 @@ export class Ne2k {
             this.port | EN0_RSARHI,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Write remote start address low: ' + h(data_byte, 2),
@@ -1026,7 +1025,7 @@ export class Ne2k {
             this.port | EN0_IMR,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Write interrupt mask register: ' +
@@ -1053,7 +1052,7 @@ export class Ne2k {
             this.port | EN0_BOUNDARY,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Read boundary: ' + h(this.boundary, 2), LOG_NET)
                     return this.boundary
@@ -1075,7 +1074,7 @@ export class Ne2k {
             this.port | EN0_BOUNDARY,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Write boundary: ' + h(data_byte, 2), LOG_NET)
                     this.boundary = data_byte
@@ -1093,7 +1092,7 @@ export class Ne2k {
             this.port | EN0_TSR,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     return this.tsr
                 } else if (pg === 1) {
@@ -1111,7 +1110,7 @@ export class Ne2k {
             this.port | EN0_TPSR,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Write tpsr: ' + h(data_byte, 2), LOG_NET)
                     this.tpsr = data_byte
@@ -1129,7 +1128,7 @@ export class Ne2k {
             this.port | EN0_TCNTLO,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'Unimplemented: Read pg0/05 (NCR: Number of Collisions Register)',
@@ -1154,7 +1153,7 @@ export class Ne2k {
             this.port | EN0_TCNTLO,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Write tcnt low: ' + h(data_byte, 2), LOG_NET)
                     this.tcnt = (this.tcnt & ~0xff) | data_byte
@@ -1178,7 +1177,7 @@ export class Ne2k {
             this.port | EN0_TCNTHI,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_assert(false, 'TODO')
                     return 0
@@ -1200,7 +1199,7 @@ export class Ne2k {
             this.port | EN0_TCNTHI,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log('Write tcnt high: ' + h(data_byte, 2), LOG_NET)
                     this.tcnt = (this.tcnt & 0xff) | (data_byte << 8)
@@ -1224,7 +1223,7 @@ export class Ne2k {
             this.port | EN0_RSR,
             this,
             function (this: Ne2k): number {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     return 1 | (1 << 3) // receive status ok
                 } else if (pg === 1) {
@@ -1242,7 +1241,7 @@ export class Ne2k {
             this.port | EN0_RXCR,
             this,
             function (this: Ne2k, data_byte: number): void {
-                var pg = this.get_page()
+                const pg = this.get_page()
                 if (pg === 0) {
                     dbg_log(
                         'RX configuration reg write: ' + h(data_byte, 2),
@@ -1279,7 +1278,7 @@ export class Ne2k {
     }
 
     get_state(): (number | Uint8Array)[] {
-        var state: (number | Uint8Array)[] = []
+        const state: (number | Uint8Array)[] = []
 
         state[0] = this.isr
         state[1] = this.imr
@@ -1491,6 +1490,7 @@ export class Ne2k {
             data[4] === this.mac[4] &&
             data[5] === this.mac[5]
         ) {
+            // unicast match, intentionally empty
         } else {
             return
         }
@@ -1500,14 +1500,14 @@ export class Ne2k {
             translate_mac_address(data, this.mac, this.mac_address_in_state)
         }
 
-        var packet_length = Math.max(60, data.length)
+        const packet_length = Math.max(60, data.length)
 
-        var offset = this.curpg << 8
-        var total_length = packet_length + 4
-        var data_start = offset + 4
-        var next = this.curpg + 1 + (total_length >> 8)
+        const offset = this.curpg << 8
+        const total_length = packet_length + 4
+        const data_start = offset + 4
+        let next = this.curpg + 1 + (total_length >> 8)
 
-        var end = offset + total_length
+        const end = offset + total_length
 
         const needed = 1 + (total_length >> 8)
 
@@ -1544,7 +1544,7 @@ export class Ne2k {
             // so we can skip filling with zeroes
             dbg_assert(data.length >= 60)
 
-            var cut = (this.pstop << 8) - data_start
+            const cut = (this.pstop << 8) - data_start
             dbg_assert(cut >= 0)
 
             this.memory.set(data.subarray(0, cut), data_start)

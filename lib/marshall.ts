@@ -25,7 +25,6 @@ export interface MarshallState {
 // 'h' = half word (2 bytes), 'b' = byte, 's' = length-prefixed string, 'Q' = QID (13 bytes).
 export type MarshallTypeCode = 'w' | 'd' | 'h' | 'b' | 's' | 'Q'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MarshallInput = any
 
 // Inserts data from an array to a byte aligned struct in memory
@@ -35,9 +34,9 @@ export function Marshall(
     struct: Uint8Array,
     offset: number,
 ): number {
-    var item: MarshallInput
-    var size = 0
-    for (var i = 0; i < typelist.length; i++) {
+    let item: MarshallInput
+    let size = 0
+    for (let i = 0; i < typelist.length; i++) {
         item = input[i]
         switch (typelist[i]) {
             case 'w':
@@ -68,13 +67,13 @@ export function Marshall(
                 size += 1
                 break
             case 's': {
-                var lengthoffset = offset
-                var length = 0
+                const lengthoffset = offset
+                let length = 0
                 struct[offset++] = 0 // set the length later
                 struct[offset++] = 0
                 size += 2
 
-                var stringBytes = texten.encode(item)
+                const stringBytes = texten.encode(item)
                 size += stringBytes.byteLength
                 length += stringBytes.byteLength
                 struct.set(stringBytes, offset)
@@ -103,19 +102,19 @@ export function Marshall(
 }
 
 // Extracts data from a byte aligned struct in memory to an array
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export function Unmarshall(
     typelist: MarshallTypeCode[],
     struct: Uint8Array,
     state: MarshallState,
 ): any[] {
     let offset = state.offset
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    var output: any[] = []
-    for (var i = 0; i < typelist.length; i++) {
+
+    const output: any[] = []
+    for (let i = 0; i < typelist.length; i++) {
         switch (typelist[i]) {
             case 'w': {
-                var val = struct[offset++]
+                let val = struct[offset++]
                 val += struct[offset++] << 8
                 val += struct[offset++] << 16
                 val += (struct[offset++] << 24) >>> 0
@@ -123,7 +122,7 @@ export function Unmarshall(
                 break
             }
             case 'd': {
-                var val = struct[offset++]
+                let val = struct[offset++]
                 val += struct[offset++] << 8
                 val += struct[offset++] << 16
                 val += (struct[offset++] << 24) >>> 0
@@ -132,7 +131,7 @@ export function Unmarshall(
                 break
             }
             case 'h': {
-                var val = struct[offset++]
+                const val = struct[offset++]
                 output.push(val + (struct[offset++] << 8))
                 break
             }
@@ -140,10 +139,10 @@ export function Unmarshall(
                 output.push(struct[offset++])
                 break
             case 's': {
-                var len = struct[offset++]
+                let len = struct[offset++]
                 len += struct[offset++] << 8
 
-                var stringBytes = struct.slice(offset, offset + len)
+                const stringBytes = struct.slice(offset, offset + len)
                 offset += len
                 output.push(textde.decode(stringBytes))
                 break

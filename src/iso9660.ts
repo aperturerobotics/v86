@@ -297,7 +297,7 @@ export function generate(files: ISOFile[]): Uint8Array {
     )
 
     // file contents
-    for (let { contents, lba } of mapped_files) {
+    for (const { contents, lba } of mapped_files) {
         buffer.buffer.set(contents, lba * BLOCK_SIZE)
     }
 

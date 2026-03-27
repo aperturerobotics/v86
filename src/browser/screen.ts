@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { dbg_assert } from '../log.js'
 import { get_charmap } from '../lib.js'
@@ -91,7 +91,7 @@ export class ScreenAdapter {
         this.scale_y = options.scale !== undefined ? options.scale : 1
         this.charmap = get_charmap(options.encoding || '')
 
-        var graphic_screen = screen_container.getElementsByTagName('canvas')[0]
+        let graphic_screen = screen_container.getElementsByTagName('canvas')[0]
         if (!graphic_screen) {
             graphic_screen = document.createElement('canvas')
             screen_container.appendChild(graphic_screen)
@@ -101,7 +101,7 @@ export class ScreenAdapter {
             alpha: false,
         })!
 
-        var text_screen = screen_container.getElementsByTagName('div')[0] as
+        let text_screen = screen_container.getElementsByTagName('div')[0] as
             | HTMLDivElement
             | undefined
         if (!text_screen) {
@@ -116,7 +116,7 @@ export class ScreenAdapter {
     }
 
     private number_as_color(n: number): string {
-        var s = n.toString(16)
+        const s = n.toString(16)
         return '#' + '0'.repeat(6 - s.length) + s
     }
 
@@ -124,7 +124,7 @@ export class ScreenAdapter {
         const bitmap_width = this.font_width * 256
         const bitmap_height = this.font_height * 8
 
-        var font_canvas = this.font_context ? this.font_context.canvas : null
+        let font_canvas = this.font_context ? this.font_context.canvas : null
         if (
             !font_canvas ||
             font_canvas.width !== bitmap_width ||
@@ -144,8 +144,8 @@ export class ScreenAdapter {
         }
 
         const font_bitmap = this.font_image_data!.data
-        var i_dst = 0
-        var is_visible = false
+        let i_dst = 0
+        let is_visible = false
         const font_width_dbl = this.font_width_dbl
         const font_width = this.font_width
         const font_height = this.font_height
@@ -171,7 +171,7 @@ export class ScreenAdapter {
         const dst_inc_line = font_width * 255 * 4
 
         for (
-            var i_chr_all = 0, i_vga = 0;
+            let i_chr_all = 0, i_vga = 0;
             i_chr_all < 2048;
             ++i_chr_all, i_vga += vga_inc_chr, i_dst += dst_inc_col
         ) {
@@ -181,12 +181,12 @@ export class ScreenAdapter {
             }
             is_visible = false
             for (
-                var i_line = 0;
+                let i_line = 0;
                 i_line < font_height;
                 ++i_line, ++i_vga, i_dst += dst_inc_line
             ) {
                 const line_bits = vga_bitmap[i_vga]
-                for (var i_bit = 0x80; i_bit > 0; i_bit >>= 1) {
+                for (let i_bit = 0x80; i_bit > 0; i_bit >>= 1) {
                     put_bit(line_bits & i_bit ? 255 : 0)
                 }
                 if (font_width_9px) {
@@ -222,9 +222,9 @@ export class ScreenAdapter {
         const row_extra_1_y = 0
         const row_extra_2_y = font_height
 
-        var n_rows_rendered = 0
+        let n_rows_rendered = 0
         for (
-            var row_i = 0, row_y = 0, txt_i = 0;
+            let row_i = 0, row_y = 0, txt_i = 0;
             row_i < this.text_mode_height;
             ++row_i, row_y += font_height
         ) {
@@ -241,12 +241,12 @@ export class ScreenAdapter {
                 font_height,
             )
 
-            var fg_rgba: number | undefined
-            var fg_x = 0
-            var bg_rgba: number | undefined
-            var bg_x = 0
+            let fg_rgba: number | undefined
+            let fg_x = 0
+            let bg_rgba: number | undefined
+            let bg_x = 0
             for (
-                var col_x = 0;
+                let col_x = 0;
                 col_x < gfx_width;
                 col_x += font_width, txt_i += TEXT_BUF_COMPONENT_SIZE
             ) {
@@ -379,13 +379,13 @@ export class ScreenAdapter {
         const txt_row_size = this.text_mode_width * TEXT_BUF_COMPONENT_SIZE
         const text_mode_data = this.text_mode_data!
         const changed_rows = this.changed_rows!
-        for (var row_i = 0, txt_i = 0; row_i < this.text_mode_height; ++row_i) {
+        for (let row_i = 0, txt_i = 0; row_i < this.text_mode_height; ++row_i) {
             if (changed_rows[row_i]) {
                 txt_i += txt_row_size
                 continue
             }
             for (
-                var col_i = 0;
+                let col_i = 0;
                 col_i < this.text_mode_width;
                 ++col_i, txt_i += TEXT_BUF_COMPONENT_SIZE
             ) {
@@ -432,8 +432,8 @@ export class ScreenAdapter {
             context.font = window.getComputedStyle(this.text_screen).font
             context.textBaseline = 'top'
 
-            for (var y = 0; y < this.text_mode_height; y++) {
-                for (var x = 0; x < this.text_mode_width; x++) {
+            for (let y = 0; y < this.text_mode_height; y++) {
+                for (let x = 0; x < this.text_mode_width; x++) {
                     const index =
                         (y * this.text_mode_width + x) * TEXT_BUF_COMPONENT_SIZE
                     const character =
@@ -519,7 +519,7 @@ export class ScreenAdapter {
     }
 
     update_text(): void {
-        for (var i = 0; i < this.text_mode_height; i++) {
+        for (let i = 0; i < this.text_mode_height; i++) {
             if (this.changed_rows![i]) {
                 this.text_update_row(i)
                 this.changed_rows![i] = 0
@@ -712,7 +712,7 @@ export class ScreenAdapter {
                 this.text_screen.appendChild(document.createElement('div'))
             }
 
-            for (var i = 0; i < rows; i++) {
+            for (let i = 0; i < rows; i++) {
                 this.text_update_row(i)
             }
 
@@ -791,10 +791,10 @@ export class ScreenAdapter {
             elem.style.transform = ''
         }
 
-        var rectangle = elem.getBoundingClientRect()
+        const rectangle = elem.getBoundingClientRect()
 
         if (use_scale) {
-            var scale_str = ''
+            let scale_str = ''
 
             scale_str += sx === 1 ? '' : ' scaleX(' + sx + ')'
             scale_str += sy === 1 ? '' : ' scaleY(' + sy + ')'
@@ -808,7 +808,7 @@ export class ScreenAdapter {
                 this.graphic_screen.style.imageRendering = ''
             }
 
-            var device_pixel_ratio = window.devicePixelRatio || 1
+            const device_pixel_ratio = window.devicePixelRatio || 1
             if (device_pixel_ratio % 1 !== 0) {
                 sx /= device_pixel_ratio
                 sy /= device_pixel_ratio
@@ -864,18 +864,18 @@ export class ScreenAdapter {
     }
 
     text_update_row(row: number): void {
-        var offset = TEXT_BUF_COMPONENT_SIZE * row * this.text_mode_width
+        let offset = TEXT_BUF_COMPONENT_SIZE * row * this.text_mode_width
 
-        var blinking: number
-        var bg_color: number
-        var fg_color: number
-        var text: string
+        let blinking: number
+        let bg_color: number
+        let fg_color: number
+        let text: string
 
-        var row_element = this.text_screen.childNodes[row]
-        var fragment = document.createElement('div')
+        const row_element = this.text_screen.childNodes[row]
+        const fragment = document.createElement('div')
 
-        for (var i = 0; i < this.text_mode_width; ) {
-            var color_element = document.createElement('span')
+        for (let i = 0; i < this.text_mode_width; ) {
+            const color_element = document.createElement('span')
 
             blinking =
                 this.text_mode_data![offset + FLAGS_INDEX] & FLAG_BLINKING
@@ -956,9 +956,9 @@ export class ScreenAdapter {
     }
 
     get_text_screen(): string[] {
-        var screen: string[] = []
+        const screen: string[] = []
 
-        for (var i = 0; i < this.text_mode_height; i++) {
+        for (let i = 0; i < this.text_mode_height; i++) {
             screen.push(this.get_text_row(i))
         }
 
@@ -969,8 +969,8 @@ export class ScreenAdapter {
         const begin =
             y * this.text_mode_width * TEXT_BUF_COMPONENT_SIZE + CHARACTER_INDEX
         const end = begin + this.text_mode_width * TEXT_BUF_COMPONENT_SIZE
-        var row = ''
-        for (var i = begin; i < end; i += TEXT_BUF_COMPONENT_SIZE) {
+        let row = ''
+        for (let i = begin; i < end; i += TEXT_BUF_COMPONENT_SIZE) {
             row += this.charmap[this.text_mode_data![i]]
         }
         return row

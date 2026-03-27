@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { h } from './lib.js'
 import { dbg_assert, dbg_log } from './log.js'
@@ -21,9 +21,8 @@ export class StateLoadError extends Error {
 
 // Minimal interface for the CPU fields state needs
 interface StateCpu {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     get_state(): any[]
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     set_state(state: any[]): void
     wasm_memory: WebAssembly.Memory
     zstd_create_ctx(len: number): number
@@ -33,7 +32,6 @@ interface StateCpu {
     zstd_free_ctx(ctx: number): void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CONSTRUCTOR_TABLE: Record<string, any> = {
     Map: Map,
     Uint8Array: Uint8Array,
@@ -46,7 +44,6 @@ const CONSTRUCTOR_TABLE: Record<string, any> = {
     Float64Array: Float64Array,
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function save_object(obj: any, saved_buffers: Uint8Array[]): any {
     if (typeof obj !== 'object' || obj === null) {
         dbg_assert(typeof obj !== 'function')
@@ -60,7 +57,7 @@ function save_object(obj: any, saved_buffers: Uint8Array[]): any {
     if (obj instanceof Map) {
         return {
             __state_type__: 'Map',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             args: Array.from(obj.entries()).map(([k, v]: [any, any]) => [
                 save_object(k, saved_buffers),
                 save_object(v, saved_buffers),
@@ -75,7 +72,7 @@ function save_object(obj: any, saved_buffers: Uint8Array[]): any {
 
     if (obj.BYTES_PER_ELEMENT) {
         // Uint8Array, etc.
-        var buffer = new Uint8Array(
+        const buffer = new Uint8Array(
             obj.buffer,
             obj.byteOffset,
             obj.length * obj.BYTES_PER_ELEMENT,
@@ -95,12 +92,12 @@ function save_object(obj: any, saved_buffers: Uint8Array[]): any {
         console.log('Object without get_state: ', obj)
     }
 
-    var state = obj.get_state()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    var result: any[] = []
+    const state = obj.get_state()
 
-    for (var i = 0; i < state.length; i++) {
-        var value = state[i]
+    const result: any[] = []
+
+    for (let i = 0; i < state.length; i++) {
+        const value = state[i]
 
         dbg_assert(typeof value !== 'function')
 
@@ -110,7 +107,6 @@ function save_object(obj: any, saved_buffers: Uint8Array[]): any {
     return result
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function restore_buffers(obj: any, buffers: ArrayBuffer[]): any {
     if (typeof obj !== 'object' || obj === null) {
         dbg_assert(typeof obj !== 'function')
@@ -140,14 +136,14 @@ function restore_buffers(obj: any, buffers: ArrayBuffer[]): any {
 }
 
 export function save_state(cpu: StateCpu): ArrayBuffer {
-    var saved_buffers: Uint8Array[] = []
-    var state = save_object(cpu, saved_buffers)
+    const saved_buffers: Uint8Array[] = []
+    const state = save_object(cpu, saved_buffers)
 
-    var buffer_infos: { offset: number; length: number }[] = []
-    var total_buffer_size = 0
+    const buffer_infos: { offset: number; length: number }[] = []
+    let total_buffer_size = 0
 
-    for (var i = 0; i < saved_buffers.length; i++) {
-        var len = saved_buffers[i].byteLength
+    for (let i = 0; i < saved_buffers.length; i++) {
+        const len = saved_buffers[i].byteLength
 
         buffer_infos[i] = {
             offset: total_buffer_size,
@@ -160,31 +156,31 @@ export function save_state(cpu: StateCpu): ArrayBuffer {
         total_buffer_size = (total_buffer_size + 3) & ~3
     }
 
-    var info_object = JSON.stringify({
+    const info_object = JSON.stringify({
         buffer_infos: buffer_infos,
         state: state,
     })
-    var info_block = new TextEncoder().encode(info_object)
+    const info_block = new TextEncoder().encode(info_object)
 
-    var buffer_block_start = STATE_INFO_BLOCK_START + info_block.length
+    let buffer_block_start = STATE_INFO_BLOCK_START + info_block.length
     buffer_block_start = (buffer_block_start + 3) & ~3
-    var total_size = buffer_block_start + total_buffer_size
+    const total_size = buffer_block_start + total_buffer_size
 
-    var result = new ArrayBuffer(total_size)
+    const result = new ArrayBuffer(total_size)
 
-    var header_block = new Int32Array(result, 0, STATE_INFO_BLOCK_START / 4)
+    const header_block = new Int32Array(result, 0, STATE_INFO_BLOCK_START / 4)
     new Uint8Array(result, STATE_INFO_BLOCK_START, info_block.length).set(
         info_block,
     )
-    var buffer_block = new Uint8Array(result, buffer_block_start)
+    const buffer_block = new Uint8Array(result, buffer_block_start)
 
     header_block[STATE_INDEX_MAGIC] = STATE_MAGIC
     header_block[STATE_INDEX_VERSION] = STATE_VERSION
     header_block[STATE_INDEX_TOTAL_LEN] = total_size
     header_block[STATE_INDEX_INFO_LEN] = info_block.length
 
-    for (var i = 0; i < saved_buffers.length; i++) {
-        var buf = saved_buffers[i]
+    for (let i = 0; i < saved_buffers.length; i++) {
+        const buf = saved_buffers[i]
         dbg_assert(buf.constructor === Uint8Array)
         buffer_block.set(buf, buffer_infos[i].offset)
     }
@@ -198,7 +194,7 @@ export function save_state(cpu: StateCpu): ArrayBuffer {
 }
 
 export function restore_state(cpu: StateCpu, state: ArrayBuffer): void {
-    var state_bytes = new Uint8Array(state)
+    const state_bytes = new Uint8Array(state)
 
     function read_state_header(
         data: Uint8Array,
@@ -352,7 +348,6 @@ export function restore_state(cpu: StateCpu, state: ArrayBuffer): void {
         let buffer_block_start = STATE_INFO_BLOCK_START + info_block_len
         buffer_block_start = (buffer_block_start + 3) & ~3
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const buffers = buffer_infos.map((buffer_info: any) => {
             const offset = buffer_block_start + buffer_info.offset
             return state_bytes.buffer.slice(offset, offset + buffer_info.length)

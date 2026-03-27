@@ -1,5 +1,3 @@
-declare var DEBUG: boolean
-
 import { v86 } from './main.js'
 import { LOG_RTC } from './const.js'
 import { h } from './lib.js'
@@ -143,7 +141,7 @@ export class RTC {
     }
 
     get_state(): RTCState {
-        var state: RTCState = [
+        const state: RTCState = [
             this.cmos_index,
             this.cmos_data,
             this.rtc_time,
@@ -182,7 +180,7 @@ export class RTC {
         this.cmos_diag_status = state[14] || 0
     }
 
-    timer(time: number, legacy_mode: boolean): number {
+    timer(time: number, _legacy_mode: boolean): number {
         time = Date.now() // XXX
         this.rtc_time += time - this.last_update
         this.last_update = time
@@ -227,7 +225,7 @@ export class RTC {
     }
 
     bcd_pack(n: number): number {
-        var i = 0,
+        let i = 0,
             result = 0,
             digit: number
 
@@ -278,7 +276,7 @@ export class RTC {
     // (none of these are used by seabios or the OSes we're
     // currently testing)
     cmos_port_read(): number {
-        var index = this.cmos_index
+        const index = this.cmos_index
 
         //this.cmos_index = 0xD;
 
@@ -378,7 +376,7 @@ export class RTC {
                 //dbg_log("cmos read from index " + h(index));
                 return this.cmos_b
 
-            case CMOS_STATUS_C:
+            case CMOS_STATUS_C: {
                 // It is important to know that upon a IRQ 8, Status Register C
                 // will contain a bitmask telling which interrupt happened.
                 // What is important is that if register C is not read after an
@@ -388,11 +386,12 @@ export class RTC {
                 dbg_log('cmos reg C read', LOG_RTC)
                 // Missing IRQF flag
                 //return cmos_b & 0x70;
-                var c = this.cmos_c
+                const c = this.cmos_c
 
                 this.cmos_c &= ~0xf0
 
                 return c
+            }
 
             case CMOS_STATUS_D:
                 return 1 << 7 // CMOS battery charged

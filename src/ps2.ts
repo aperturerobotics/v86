@@ -11,7 +11,7 @@ interface PS2Cpu {
     io: IO
     device_raise_irq(irq: number): void
     device_lower_irq(irq: number): void
-    reboot_internal(): void
+    reboot(): void
 }
 
 type PS2State = [
@@ -185,7 +185,7 @@ export class PS2 {
     }
 
     get_state(): PS2State {
-        var state: PS2State = [
+        const state: PS2State = [
             this.enable_mouse_stream,
             this.use_mouse,
             this.have_mouse,
@@ -324,7 +324,7 @@ export class PS2 {
         this.mouse_delta_y += delta_y * factor
 
         if (this.enable_mouse_stream) {
-            var change_x = this.mouse_delta_x | 0,
+            const change_x = this.mouse_delta_x | 0,
                 change_y = this.mouse_delta_y | 0
 
             if (change_x || change_y) {
@@ -356,7 +356,7 @@ export class PS2 {
     }
 
     send_mouse_packet(dx: number, dy: number): void {
-        var info_byte =
+        const info_byte =
                 ((dy < 0 ? 1 : 0) << 5) |
                 ((dx < 0 ? 1 : 0) << 4) |
                 (1 << 3) |
@@ -398,7 +398,7 @@ export class PS2 {
 
     apply_scaling2(n: number): number {
         // http://www.computer-engineering.org/ps2mouse/#Inputs.2C_Resolution.2C_and_Scaling
-        var abs = Math.abs(n),
+        const abs = Math.abs(n),
             sign = n >> 31
 
         switch (abs) {
@@ -454,7 +454,7 @@ export class PS2 {
     port64_read(): number {
         // status port
 
-        var status_byte = 0x10
+        let status_byte = 0x10
 
         if (this.next_byte_is_ready) {
             status_byte |= 0x1
@@ -808,7 +808,7 @@ export class PS2 {
                 break
             case 0xfe:
                 dbg_log('CPU reboot via PS2')
-                this.cpu.reboot_internal()
+                this.cpu.reboot()
                 break
             default:
                 dbg_log(

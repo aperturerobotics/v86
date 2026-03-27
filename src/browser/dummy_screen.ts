@@ -83,13 +83,12 @@ export class DummyScreenAdapter {
         this.cursor_col = col
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     update_buffer(_layers: any[]): void {}
 
     get_text_screen(): string[] {
-        var screen: string[] = []
+        const screen: string[] = []
 
-        for (var i = 0; i < this.text_mode_height; i++) {
+        for (let i = 0; i < this.text_mode_height; i++) {
             screen.push(this.get_text_row(i))
         }
 

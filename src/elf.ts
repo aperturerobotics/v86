@@ -1,4 +1,4 @@
-declare var DEBUG: boolean
+declare let DEBUG: boolean
 
 import { dbg_log, LOG_LEVEL } from './log.js'
 
@@ -237,7 +237,7 @@ function read_structs(
     const result: StructRecord[] = []
     let offset = 0
 
-    for (var i = 0; i < count; i++) {
+    for (let i = 0; i < count; i++) {
         const [s, size] = read_struct(view_slice(view, offset), Struct)
         result.push(s)
         offset += size
