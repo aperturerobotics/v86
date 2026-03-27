@@ -1,20 +1,71 @@
 {
-  "name": "v86",
-  "version": "0.5",
-  "license": "BSD-2-Clause",
-  "description": "x86 PC emulator and x86-to-wasm JIT, running in the browser",
-  "homepage": "https://copy.sh/v86/",
-  "files": [
-    "Readme.md",
-    "LICENSE",
-    "v86.d.ts",
-    "build/libv86*.js",
-    "build/libv86*.js.map",
-    "build/*.mjs",
-    "build/v86*.wasm"
-  ],
-  "main": "build/libv86.mjs",
-  "types": "v86.d.ts",
-  "repository": "github:copy/v86",
-  "type": "module"
+    "name": "@aptre/v86",
+    "version": "0.5.0",
+    "license": "BSD-2-Clause",
+    "description": "x86 PC emulator and x86-to-wasm JIT, running in the browser",
+    "homepage": "https://github.com/aperturerobotics/v86",
+    "repository": "github:aperturerobotics/v86",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/v86.d.ts",
+            "import": "./dist/v86.js"
+        },
+        "./fs": {
+            "types": "./dist/fs.d.ts",
+            "import": "./dist/fs.js"
+        },
+        "./9p": {
+            "types": "./dist/9p.d.ts",
+            "import": "./dist/9p.js"
+        },
+        "./bus": {
+            "types": "./dist/bus.d.ts",
+            "import": "./dist/bus.js"
+        }
+    },
+    "files": [
+        "!**/*.tsbuildinfo",
+        "dist",
+        "Readme.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "clean": "rimraf ./dist",
+        "build": "bun build.mjs",
+        "build:debug": "bun build.mjs --debug",
+        "typecheck": "tsgo --noEmit",
+        "lint": "eslint ./",
+        "format": "prettier --write 'src/**/*.{js,ts}' 'lib/**/*.{js,ts}' 'gen/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
+        "format:check": "prettier --check 'src/**/*.{js,ts}' 'lib/**/*.{js,ts}' 'gen/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
+        "format:config": "prettier --write tsconfig.json package.json",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "prepare": "husky",
+        "precommit": "lint-staged",
+        "release": "npm version patch --no-git-tag-version && bun run release:commit",
+        "release:minor": "npm version minor --no-git-tag-version && bun run release:commit",
+        "release:commit": "git reset && git add package.json && git commit -s -m \"release: v$(bun -e \"console.log(require('./package.json').version)\")\" && git tag v$(bun -e \"console.log(require('./package.json').version)\")",
+        "release:publish": "git push && git push --tags"
+    },
+    "lint-staged": {
+        "package.json": "prettier --config .prettierrc.yaml --write",
+        "./{src,lib,gen,tests}/**/*.{ts,js}": "prettier --config .prettierrc.yaml --write"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.27.0",
+        "@typescript/native-preview": "^7.0.0-dev.20250601",
+        "eslint": "^9.27.0",
+        "eslint-config-prettier": "^10.1.5",
+        "eslint-plugin-unused-imports": "^4.4.1",
+        "esbuild": "^0.25.4",
+        "globals": "^16.1.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.0.0",
+        "prettier": "^3.5.3",
+        "rimraf": "^6.0.1",
+        "typescript": "^5.8.3",
+        "typescript-eslint": "^8.32.1",
+        "vitest": "^3.1.4"
+    }
 }

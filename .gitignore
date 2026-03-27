@@ -16,6 +16,9 @@ images/
 *.fuse_hidden*
 *.DS_Store
 node_modules/
+dist/
+.tmp/
+bun.lock
 Cargo.lock
 build-head
 src/rust/gen/interpreter.rs

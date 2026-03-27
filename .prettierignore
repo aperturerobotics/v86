@@ -1,0 +1,10 @@
+build/
+dist/
+src/rust/
+lib/softfloat/
+lib/zstd/
+closure-compiler/
+node_modules/
+*.wasm
+*.bin
+*.img
