@@ -139,6 +139,7 @@ interface OptionRom {
 interface WasmModule {
     exports: Record<string, any>
     wasm_table: WebAssembly.Table
+    wasm_memory: WebAssembly.Memory
 }
 
 export class CPU {
@@ -340,7 +341,7 @@ export class CPU {
         this.wasm_patch()
         this.create_jit_imports()
 
-        const memory = this.wm.exports['memory']
+        const memory = this.wm.wasm_memory
 
         this.wasm_memory = memory
 

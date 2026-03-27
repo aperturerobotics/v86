@@ -105,14 +105,28 @@ export class V86 {
 
         let cpu: any
 
-        let wasm_memory: any
+        const memory_size = options.memory_size || 64 * 1024 * 1024
+        const WASM_PAGE_SIZE = 65536
+        // Initial pages: enough for the WASM runtime (256 pages = 16MB)
+        const wasm_initial_pages = 256
+        // Maximum pages: memory_max option or 4x memory_size, capped at 2GB
+        const memory_max = options.memory_max || memory_size * 4
+        const wasm_max_pages = Math.min(
+            Math.ceil(memory_max / WASM_PAGE_SIZE),
+            32768,
+        )
+        const wasm_memory = new WebAssembly.Memory({
+            initial: wasm_initial_pages,
+            maximum: wasm_max_pages,
+        })
 
         const wasm_table = new WebAssembly.Table({
             element: 'anyfunc',
             initial: WASM_TABLE_SIZE + WASM_TABLE_OFFSET,
         })
 
-        const wasm_shared_funcs = {
+        const wasm_shared_funcs: Record<string, any> = {
+            memory: wasm_memory,
             cpu_exception_hook: (n: number) => this.cpu_exception_hook(n),
 
             run_hardware_timers: function (a: any, t: any) {
@@ -280,12 +294,12 @@ export class V86 {
         }
 
         wasm_fn({ env: wasm_shared_funcs }).then((exports: WasmExports) => {
-            wasm_memory = exports.memory
             exports['rust_init']()
 
             const emulator = (this.v86 = new v86(this.emulator_bus, {
                 exports,
                 wasm_table,
+                wasm_memory,
             }))
             cpu = emulator.cpu
 
