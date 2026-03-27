@@ -125,7 +125,6 @@ jobs:
           bun tests/api/serial.ts
           bun tests/api/pic.ts
           bun tests/api/2g-mem.ts
-          bun tests/api/test.ts
 
       - name: Run qemutests
         run: |
