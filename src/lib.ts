@@ -1,30 +1,44 @@
+declare var DEBUG: boolean
+
 import { dbg_assert } from './log.js'
 
 // pad string with spaces on the right
-export function pads(str, len) {
-    str = str || str === 0 ? str + '' : ''
-    return str.padEnd(len, ' ')
+export function pads(
+    str: string | number | undefined | null,
+    len: number,
+): string {
+    var s = str || str === 0 ? str + '' : ''
+    return s.padEnd(len, ' ')
 }
 
 // pad string with zeros on the left
-export function pad0(str, len) {
-    str = str || str === 0 ? str + '' : ''
-    return str.padStart(len, '0')
+export function pad0(
+    str: string | number | undefined | null,
+    len: number,
+): string {
+    var s = str || str === 0 ? str + '' : ''
+    return s.padStart(len, '0')
 }
 
-export var view = function (constructor, memory, offset, length) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export var view = function (
+    constructor: any,
+    memory: { buffer: ArrayBuffer },
+    offset: number,
+    length: number,
+): any {
     dbg_assert(offset >= 0)
     return new Proxy(
         {},
         {
-            get: function (target, property, receiver) {
+            get: function (_target, property) {
                 const b = new constructor(memory.buffer, offset, length)
                 const x = b[property]
                 if (typeof x === 'function') {
                     return x.bind(b)
                 }
                 dbg_assert(
-                    /^\d+$/.test(property) ||
+                    /^\d+$/.test(String(property)) ||
                         property === 'buffer' ||
                         property === 'length' ||
                         property === 'BYTES_PER_ELEMENT' ||
@@ -32,8 +46,8 @@ export var view = function (constructor, memory, offset, length) {
                 )
                 return x
             },
-            set: function (target, property, value, receiver) {
-                dbg_assert(/^\d+$/.test(property))
+            set: function (_target, property, value) {
+                dbg_assert(/^\d+$/.test(String(property)))
                 new constructor(memory.buffer, offset, length)[property] = value
                 return true
             },
@@ -41,28 +55,23 @@ export var view = function (constructor, memory, offset, length) {
     )
 }
 
-/**
- * number to hex
- * @param {number} n
- * @param {number=} len
- * @return {string}
- */
-export function h(n, len) {
+export function h(n: number, len?: number): string {
+    var str: string
     if (!n) {
-        var str = ''
+        str = ''
     } else {
-        var str = n.toString(16)
+        str = n.toString(16)
     }
 
     return '0x' + pad0(str.toUpperCase(), len || 1)
 }
 
-export function hex_dump(buffer) {
-    function hex(n, len) {
+export function hex_dump(buffer: Uint8Array | number[]): string {
+    function hex(n: number, len: number): string {
         return pad0(n.toString(16).toUpperCase(), len)
     }
 
-    const result = []
+    const result: string[] = []
     let offset = 0
 
     for (; offset + 15 < buffer.length; offset += 16) {
@@ -109,7 +118,7 @@ export function hex_dump(buffer) {
 }
 
 /* global require */
-export var get_rand_int
+export var get_rand_int: () => number
 if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     const rand_data = new Int32Array(1)
 
@@ -118,23 +127,22 @@ if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
         return rand_data[0]
     }
 } else if (typeof require !== 'undefined') {
-    /** @type {{ randomBytes: Function }} */
-    const crypto = require('crypto')
+    const nodeCrypto = require('crypto')
 
     get_rand_int = function () {
-        return crypto.randomBytes(4)['readInt32LE'](0)
+        return nodeCrypto.randomBytes(4).readInt32LE(0)
     }
 } else if (typeof process !== 'undefined') {
-    import('node:' + 'crypto').then((crypto) => {
+    import('node:' + 'crypto').then((nodeCrypto) => {
         get_rand_int = function () {
-            return crypto['randomBytes'](4)['readInt32LE'](0)
+            return nodeCrypto['randomBytes'](4).readInt32LE(0)
         }
     })
 } else {
     dbg_assert(false, 'Unsupported platform: No cryptographic random values')
 }
 
-export var int_log2
+export var int_log2: (x: number) => number
 
 if (
     typeof Math.clz32 === 'function' &&
@@ -142,12 +150,7 @@ if (
     Math.clz32(0x12345) === 15 &&
     Math.clz32(-1) === 0
 ) {
-    /**
-     * calculate the integer logarithm base 2
-     * @param {number} x
-     * @return {number}
-     */
-    int_log2 = function (x) {
+    int_log2 = function (x: number): number {
         dbg_assert(x > 0)
 
         return 31 - Math.clz32(x)
@@ -161,12 +164,7 @@ if (
         int_log2_table[i] = b
     }
 
-    /**
-     * calculate the integer logarithm base 2
-     * @param {number} x
-     * @return {number}
-     */
-    int_log2 = function (x) {
+    int_log2 = function (x: number): number {
         x >>>= 0
         dbg_assert(x > 0)
 
@@ -191,7 +189,7 @@ if (
     }
 }
 
-export const round_up_to_next_power_of_2 = function (x) {
+export const round_up_to_next_power_of_2 = function (x: number): number {
     dbg_assert(x >= 0)
     return x <= 1 ? 1 : 1 << (1 + int_log2(x - 1))
 }
@@ -211,176 +209,136 @@ if (typeof DEBUG !== 'undefined' && DEBUG) {
     dbg_assert(round_up_to_next_power_of_2(123456789) === 134217728)
 }
 
-/**
- * @constructor
- *
- * Queue wrapper around Uint8Array
- * Used by devices such as the PS2 controller
- */
-export function ByteQueue(size) {
-    var data = new Uint8Array(size),
-        start,
-        end
+export class ByteQueue {
+    length: number = 0
+    private data: Uint8Array
+    private start: number = 0
+    private end: number = 0
+    private size: number
 
-    dbg_assert((size & (size - 1)) === 0)
+    constructor(size: number) {
+        this.size = size
+        this.data = new Uint8Array(size)
 
-    this.length = 0
+        dbg_assert((size & (size - 1)) === 0)
+    }
 
-    this.push = function (item) {
-        if (this.length === size) {
+    push(item: number): void {
+        if (this.length === this.size) {
             // intentional overwrite
         } else {
             this.length++
         }
 
-        data[end] = item
-        end = (end + 1) & (size - 1)
+        this.data[this.end] = item
+        this.end = (this.end + 1) & (this.size - 1)
     }
 
-    this.shift = function () {
+    shift(): number {
         if (!this.length) {
             return -1
         } else {
-            var item = data[start]
+            var item = this.data[this.start]
 
-            start = (start + 1) & (size - 1)
+            this.start = (this.start + 1) & (this.size - 1)
             this.length--
 
             return item
         }
     }
 
-    this.peek = function () {
+    peek(): number {
         if (!this.length) {
             return -1
         } else {
-            return data[start]
+            return this.data[this.start]
         }
     }
 
-    this.clear = function () {
-        start = 0
-        end = 0
+    clear(): void {
+        this.start = 0
+        this.end = 0
         this.length = 0
     }
-
-    this.clear()
 }
 
-/**
- * @constructor
- *
- * Queue wrapper around Float32Array
- * Used by devices such as the sound blaster sound card
- */
-export function FloatQueue(size) {
-    this.size = size
-    this.data = new Float32Array(size)
-    this.start = 0
-    this.end = 0
-    this.length = 0
+export class FloatQueue {
+    size: number
+    data: Float32Array
+    start: number = 0
+    end: number = 0
+    length: number = 0
 
-    dbg_assert((size & (size - 1)) === 0)
-}
+    constructor(size: number) {
+        this.size = size
+        this.data = new Float32Array(size)
 
-FloatQueue.prototype.push = function (item) {
-    if (this.length === this.size) {
-        // intentional overwrite
-        this.start = (this.start + 1) & (this.size - 1)
-    } else {
-        this.length++
+        dbg_assert((size & (size - 1)) === 0)
     }
 
-    this.data[this.end] = item
-    this.end = (this.end + 1) & (this.size - 1)
-}
+    push(item: number): void {
+        if (this.length === this.size) {
+            // intentional overwrite
+            this.start = (this.start + 1) & (this.size - 1)
+        } else {
+            this.length++
+        }
 
-FloatQueue.prototype.shift = function () {
-    if (!this.length) {
-        return undefined
-    } else {
-        var item = this.data[this.start]
+        this.data[this.end] = item
+        this.end = (this.end + 1) & (this.size - 1)
+    }
 
-        this.start = (this.start + 1) & (this.size - 1)
-        this.length--
+    shift(): number | undefined {
+        if (!this.length) {
+            return undefined
+        } else {
+            var item = this.data[this.start]
 
-        return item
+            this.start = (this.start + 1) & (this.size - 1)
+            this.length--
+
+            return item
+        }
+    }
+
+    shift_block(count: number): Float32Array {
+        var slice = new Float32Array(count)
+
+        if (count > this.length) {
+            count = this.length
+        }
+        var slice_end = this.start + count
+
+        var partial = this.data.subarray(this.start, slice_end)
+
+        slice.set(partial)
+        if (slice_end >= this.size) {
+            slice_end -= this.size
+            slice.set(this.data.subarray(0, slice_end), partial.length)
+        }
+        this.start = slice_end
+
+        this.length -= count
+
+        return slice
+    }
+
+    peek(): number | undefined {
+        if (!this.length) {
+            return undefined
+        } else {
+            return this.data[this.start]
+        }
+    }
+
+    clear(): void {
+        this.start = 0
+        this.end = 0
+        this.length = 0
     }
 }
 
-FloatQueue.prototype.shift_block = function (count) {
-    var slice = new Float32Array(count)
-
-    if (count > this.length) {
-        count = this.length
-    }
-    var slice_end = this.start + count
-
-    var partial = this.data.subarray(this.start, slice_end)
-
-    slice.set(partial)
-    if (slice_end >= this.size) {
-        slice_end -= this.size
-        slice.set(this.data.subarray(0, slice_end), partial.length)
-    }
-    this.start = slice_end
-
-    this.length -= count
-
-    return slice
-}
-
-FloatQueue.prototype.peek = function () {
-    if (!this.length) {
-        return undefined
-    } else {
-        return this.data[this.start]
-    }
-}
-
-FloatQueue.prototype.clear = function () {
-    this.start = 0
-    this.end = 0
-    this.length = 0
-}
-
-/**
- * Simple circular queue for logs
- *
- * @param {number} size
- * @constructor
- */
-function CircularQueue(size) {
-    this.data = []
-    this.index = 0
-    this.size = size
-}
-
-CircularQueue.prototype.add = function (item) {
-    this.data[this.index] = item
-    this.index = (this.index + 1) % this.size
-}
-
-CircularQueue.prototype.toArray = function () {
-    return [].slice
-        .call(this.data, this.index)
-        .concat([].slice.call(this.data, 0, this.index))
-}
-
-CircularQueue.prototype.clear = function () {
-    this.data = []
-    this.index = 0
-}
-
-/**
- * @param {Array} new_data
- */
-CircularQueue.prototype.set = function (new_data) {
-    this.data = new_data
-    this.index = 0
-}
-
-export function dump_file(ab, name) {
+export function dump_file(ab: BlobPart | BlobPart[], name: string): void {
     if (!Array.isArray(ab)) {
         ab = [ab]
     }
@@ -389,7 +347,7 @@ export function dump_file(ab, name) {
     download(blob, name)
 }
 
-export function download(file_or_blob, name) {
+export function download(file_or_blob: Blob | File, name: string): void {
     var a = document.createElement('a')
     a['download'] = name
     a.href = window.URL.createObjectURL(file_or_blob)
@@ -426,43 +384,58 @@ export function download(file_or_blob, name) {
     window.URL.revokeObjectURL(a.href)
 }
 
-/**
- * A simple 1d bitmap
- * @constructor
- */
-export var Bitmap = function (length_or_buffer) {
-    if (typeof length_or_buffer === 'number') {
-        this.view = new Uint8Array((length_or_buffer + 7) >> 3)
-    } else if (length_or_buffer instanceof ArrayBuffer) {
-        this.view = new Uint8Array(length_or_buffer)
-    } else {
-        dbg_assert(false, 'Bitmap: Invalid argument')
+export class Bitmap {
+    view: Uint8Array
+
+    constructor(length_or_buffer: number | ArrayBuffer) {
+        if (typeof length_or_buffer === 'number') {
+            this.view = new Uint8Array((length_or_buffer + 7) >> 3)
+        } else if (length_or_buffer instanceof ArrayBuffer) {
+            this.view = new Uint8Array(length_or_buffer)
+        } else {
+            dbg_assert(false, 'Bitmap: Invalid argument')
+            this.view = new Uint8Array(0)
+        }
+    }
+
+    set(index: number, value: number): void {
+        const bit_index = index & 7
+        const byte_index = index >> 3
+        const bit_mask = 1 << bit_index
+
+        this.view[byte_index] = value
+            ? this.view[byte_index] | bit_mask
+            : this.view[byte_index] & ~bit_mask
+    }
+
+    get(index: number): number {
+        const bit_index = index & 7
+        const byte_index = index >> 3
+
+        return (this.view[byte_index] >> bit_index) & 1
+    }
+
+    get_buffer(): ArrayBufferLike {
+        return this.view.buffer
     }
 }
 
-Bitmap.prototype.set = function (index, value) {
-    const bit_index = index & 7
-    const byte_index = index >> 3
-    const bit_mask = 1 << bit_index
-
-    this.view[byte_index] = value
-        ? this.view[byte_index] | bit_mask
-        : this.view[byte_index] & ~bit_mask
+export interface LoadFileOptions {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    done?: (result: any, http?: XMLHttpRequest) => void
+    progress?: (e: ProgressEvent) => void
+    as_json?: boolean
+    method?: string
+    headers?: Record<string, string>
+    range?: { start: number; length: number }
 }
 
-Bitmap.prototype.get = function (index) {
-    const bit_index = index & 7
-    const byte_index = index >> 3
-
-    return (this.view[byte_index] >> bit_index) & 1
-}
-
-Bitmap.prototype.get_buffer = function () {
-    return this.view.buffer
-}
-
-export var load_file
-export var get_file_size
+export var load_file: (
+    filename: string,
+    options: LoadFileOptions,
+    n_tries?: number,
+) => Promise<void>
+export var get_file_size: (path: string) => Promise<number>
 
 if (
     typeof XMLHttpRequest === 'undefined' ||
@@ -470,14 +443,14 @@ if (
         process.versions &&
         process.versions.node)
 ) {
-    let fs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let fs: any
 
-    /**
-     * @param {string} filename
-     * @param {Object} options
-     * @param {number=} n_tries
-     */
-    load_file = async function (filename, options, n_tries) {
+    load_file = async function (
+        filename: string,
+        options: LoadFileOptions,
+        _n_tries?: number,
+    ) {
         if (!fs) {
             // string concat to work around closure compiler 'Invalid module path "node:fs/promises" for resolution mode'
             fs = await import('node:' + 'fs/promises')
@@ -492,7 +465,6 @@ if (
             const buffer = Buffer.allocUnsafe(length)
 
             try {
-                /** @type {{ bytesRead: Number }} */
                 const result = await fd['read']({
                     buffer,
                     position: options.range.start,
@@ -509,15 +481,15 @@ if (
             }
 
             const data = await fs['readFile'](filename, o)
-            const result = options.as_json
-                ? JSON.parse(data)
-                : new Uint8Array(data).buffer
-
-            options.done(result)
+            if (options.as_json) {
+                options.done!(JSON.parse(data))
+            } else {
+                options.done!(new Uint8Array(data).buffer)
+            }
         }
     }
 
-    get_file_size = async function (path) {
+    get_file_size = async function (path: string) {
         if (!fs) {
             // string concat to work around closure compiler 'Invalid module path "node:fs/promises" for resolution mode'
             fs = await import('node:' + 'fs/promises')
@@ -526,12 +498,11 @@ if (
         return stat.size
     }
 } else {
-    /**
-     * @param {string} filename
-     * @param {Object} options
-     * @param {number=} n_tries
-     */
-    load_file = async function (filename, options, n_tries) {
+    load_file = async function (
+        filename: string,
+        options: LoadFileOptions,
+        n_tries?: number,
+    ) {
         var http = new XMLHttpRequest()
 
         http.open(options.method || 'get', filename, true)
@@ -570,7 +541,7 @@ if (
             }
         }
 
-        http.onload = function (e) {
+        http.onload = function (_e) {
             if (http.readyState === 4) {
                 if (http.status !== 200 && http.status !== 206) {
                     console.error(
@@ -602,7 +573,7 @@ if (
 
         if (options.progress) {
             http.onprogress = function (e) {
-                options.progress(e)
+                options.progress!(e)
             }
         }
 
@@ -617,11 +588,11 @@ if (
         }
     }
 
-    get_file_size = async function (url) {
+    get_file_size = async function (url: string) {
         return new Promise((resolve, reject) => {
             load_file(url, {
-                done: (buffer, http) => {
-                    var header = http.getResponseHeader('Content-Range') || ''
+                done: (_buffer, http) => {
+                    var header = http!.getResponseHeader('Content-Range') || ''
                     var match = header.match(/\/(\d+)\s*$/)
 
                     if (match) {
@@ -645,26 +616,19 @@ if (
 }
 
 // Reads len characters at offset from Memory object mem as a JS string
-export function read_sized_string_from_mem(mem, offset, len) {
+export function read_sized_string_from_mem(
+    mem: { buffer: ArrayBuffer },
+    offset: number,
+    len: number,
+): string {
     offset >>>= 0
     len >>>= 0
     return String.fromCharCode(...new Uint8Array(mem.buffer, offset, len))
 }
 
-/**
- * Unicode mappings of supported 8-bit code pages.
- * Each mapping is a string of 256 Unicode symbols used as a lookup table for 8-bit character codes.
- *
- * Supported mappings and their encoding labels:
- * - "cp437": CP437 (MS-DOS Latin US), default
- * - "cp858": CP858 (Western Europe), the lower 128 bytes are identical to CP437
- * - "ascii": ASCII (7-Bit), same as CP437 with lower 32 and upper 128 bytes mapped to "."
- *
- * @type {Object<string, string>}
- */
-const CHARMAPS = {
-    cp437: ' ☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ ',
-    cp858: 'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜø£Ø×ƒáíóúñÑªº¿®¬½¼¡«»░▒▓│┤ÁÂÀ©╣║╗╝¢¥┐└┴┬├─┼ãÃ╚╔╩╦╠═╬¤ðÐÊËÈ€ÍÎÏ┘┌█▄¦Ì▀ÓßÔÒõÕµþÞÚÛÙýÝ¯´­±‗¾¶§÷¸°¨·¹³²■ ',
+const CHARMAPS: Record<string, string> = {
+    cp437: ' \u263A\u263B\u2665\u2666\u2663\u2660\u2022\u25D8\u25CB\u25D9\u2642\u2640\u266A\u266B\u263C\u25BA\u25C4\u2195\u203C\u00B6\u00A7\u25AC\u21A8\u2191\u2193\u2192\u2190\u221F\u2194\u25B2\u25BC !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2302\u00C7\u00FC\u00E9\u00E2\u00E4\u00E0\u00E5\u00E7\u00EA\u00EB\u00E8\u00EF\u00EE\u00EC\u00C4\u00C5\u00C9\u00E6\u00C6\u00F4\u00F6\u00F2\u00FB\u00F9\u00FF\u00D6\u00DC\u00A2\u00A3\u00A5\u20A7\u0192\u00E1\u00ED\u00F3\u00FA\u00F1\u00D1\u00AA\u00BA\u00BF\u2310\u00AC\u00BD\u00BC\u00A1\u00AB\u00BB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\u00DF\u0393\u03C0\u03A3\u03C3\u00B5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\u00B1\u2265\u2264\u2320\u2321\u00F7\u2248\u00B0\u2219\u00B7\u221A\u207F\u00B2\u25A0 ',
+    cp858: '\u00C7\u00FC\u00E9\u00E2\u00E4\u00E0\u00E5\u00E7\u00EA\u00EB\u00E8\u00EF\u00EE\u00EC\u00C4\u00C5\u00C9\u00E6\u00C6\u00F4\u00F6\u00F2\u00FB\u00F9\u00FF\u00D6\u00DC\u00F8\u00A3\u00D8\u00D7\u0192\u00E1\u00ED\u00F3\u00FA\u00F1\u00D1\u00AA\u00BA\u00BF\u00AE\u00AC\u00BD\u00BC\u00A1\u00AB\u00BB\u2591\u2592\u2593\u2502\u2524\u00C1\u00C2\u00C0\u00A9\u2563\u2551\u2557\u255D\u00A2\u00A5\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u00E3\u00C3\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u00A4\u00F0\u00D0\u00CA\u00CB\u00C8\u20AC\u00CD\u00CE\u00CF\u2518\u250C\u2588\u2584\u00A6\u00CC\u2580\u00D3\u00DF\u00D4\u00D2\u00F5\u00D5\u00B5\u00FE\u00DE\u00DA\u00DB\u00D9\u00FD\u00DD\u00AF\u00B4\u00AD\u00B1\u2017\u00BE\u00B6\u00A7\u00F7\u00B8\u00B0\u00A8\u00B7\u00B9\u00B3\u00B2\u25A0 ',
 }
 
 CHARMAPS.cp858 = CHARMAPS.cp437.slice(0, 128) + CHARMAPS.cp858
@@ -673,12 +637,6 @@ CHARMAPS.ascii = CHARMAPS.cp437
     .map((c, i) => (i > 31 && i < 128 ? c : '.'))
     .join('')
 
-/**
- * Return charmap for given encoding, default to CP437 if encoding is falsey or not defined in CHARMAPS.
- *
- * @param {string} encoding
- * @return {!string}
- */
-export function get_charmap(encoding) {
+export function get_charmap(encoding: string): string {
     return encoding && CHARMAPS[encoding] ? CHARMAPS[encoding] : CHARMAPS.cp437
 }

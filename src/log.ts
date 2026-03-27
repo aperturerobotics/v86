@@ -1,7 +1,11 @@
 declare var DEBUG: boolean
 
 if (typeof DEBUG === 'undefined') {
-    ;(globalThis as Record<string, unknown>).DEBUG = true
+    Object.defineProperty(globalThis, 'DEBUG', {
+        value: true,
+        writable: true,
+        configurable: true,
+    })
 }
 
 import { LOG_NAMES } from './const.js'
@@ -59,16 +63,11 @@ export const dbg_log: (stuff: string | number, level?: number) => void =
             return function () {}
         }
 
-        const dbg_names: Record<number, string> = LOG_NAMES.reduce(
-            function (
-                a: Record<number, string>,
-                x: [number, string] | (string | number)[],
-            ) {
-                a[x[0] as number] = x[1] as string
-                return a
-            },
-            {} as Record<number, string>,
-        )
+        const init: Record<number, string> = {}
+        const dbg_names = LOG_NAMES.reduce(function (a, x) {
+            a[x[0]] = x[1]
+            return a
+        }, init)
 
         var log_last_message = ''
         var log_message_repetitions = 0

@@ -13,7 +13,8 @@
     "noImplicitOverride": true,
     "allowJs": true,
     "checkJs": false,
-    "lib": ["ES2024", "DOM", "WebWorker"]
+    "lib": ["ES2024", "DOM", "WebWorker"],
+    "types": ["node"]
   },
   "include": ["src", "lib", "gen", "tests"],
   "exclude": ["node_modules", "dist", "build", "src/rust"]

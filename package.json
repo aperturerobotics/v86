@@ -54,11 +54,12 @@
     },
     "devDependencies": {
         "@eslint/js": "^9.27.0",
+        "@types/node": "^25.5.0",
         "@typescript/native-preview": "^7.0.0-dev.20250601",
+        "esbuild": "^0.25.4",
         "eslint": "^9.27.0",
         "eslint-config-prettier": "^10.1.5",
         "eslint-plugin-unused-imports": "^4.4.1",
-        "esbuild": "^0.25.4",
         "globals": "^16.1.0",
         "husky": "^9.1.7",
         "lint-staged": "^16.0.0",

@@ -29,7 +29,7 @@ export const LOG_ALL = -1,
 /**
  * @type {Array<Array<string|number>>}
  */
-export const LOG_NAMES = [
+export const LOG_NAMES: ReadonlyArray<readonly [number, string]> = [
     [1, ''],
     [LOG_CPU, 'CPU'],
     [LOG_DISK, 'DISK'],
