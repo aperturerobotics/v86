@@ -1,6 +1,7 @@
+declare var DEBUG: boolean
+
 import { h } from './lib.js'
 import { dbg_assert, dbg_log } from './log.js'
-import { CPU } from './cpu.js'
 
 const STATE_VERSION = 6
 const STATE_MAGIC = 0x86768676 | 0
@@ -12,13 +13,28 @@ const STATE_INFO_BLOCK_START = 16
 
 const ZSTD_MAGIC = 0xfd2fb528
 
-/** @constructor */
-function StateLoadError(msg) {
-    this.message = msg
+export class StateLoadError extends Error {
+    constructor(msg: string) {
+        super(msg)
+    }
 }
-StateLoadError.prototype = new Error()
 
-const CONSTRUCTOR_TABLE = {
+// Minimal interface for the CPU fields state needs
+interface StateCpu {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get_state(): any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    set_state(state: any[]): void
+    wasm_memory: WebAssembly.Memory
+    zstd_create_ctx(len: number): number
+    zstd_get_src_ptr(ctx: number): number
+    zstd_read(ctx: number, len: number): number
+    zstd_read_free(ptr: number, len: number): void
+    zstd_free_ctx(ctx: number): void
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CONSTRUCTOR_TABLE: Record<string, any> = {
     Map: Map,
     Uint8Array: Uint8Array,
     Int8Array: Int8Array,
@@ -30,7 +46,8 @@ const CONSTRUCTOR_TABLE = {
     Float64Array: Float64Array,
 }
 
-function save_object(obj, saved_buffers) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function save_object(obj: any, saved_buffers: Uint8Array[]): any {
     if (typeof obj !== 'object' || obj === null) {
         dbg_assert(typeof obj !== 'function')
         return obj
@@ -43,7 +60,8 @@ function save_object(obj, saved_buffers) {
     if (obj instanceof Map) {
         return {
             __state_type__: 'Map',
-            args: Array.from(obj.entries()).map(([k, v]) => [
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            args: Array.from(obj.entries()).map(([k, v]: [any, any]) => [
                 save_object(k, saved_buffers),
                 save_object(v, saved_buffers),
             ]),
@@ -78,7 +96,8 @@ function save_object(obj, saved_buffers) {
     }
 
     var state = obj.get_state()
-    var result = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    var result: any[] = []
 
     for (var i = 0; i < state.length; i++) {
         var value = state[i]
@@ -91,7 +110,8 @@ function save_object(obj, saved_buffers) {
     return result
 }
 
-function restore_buffers(obj, buffers) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function restore_buffers(obj: any, buffers: ArrayBuffer[]): any {
     if (typeof obj !== 'object' || obj === null) {
         dbg_assert(typeof obj !== 'function')
         return obj
@@ -119,12 +139,11 @@ function restore_buffers(obj, buffers) {
     return new constructor(buffer)
 }
 
-/* @param {CPU} cpu */
-export function save_state(cpu) {
-    var saved_buffers = []
+export function save_state(cpu: StateCpu): ArrayBuffer {
+    var saved_buffers: Uint8Array[] = []
     var state = save_object(cpu, saved_buffers)
 
-    var buffer_infos = []
+    var buffer_infos: { offset: number; length: number }[] = []
     var total_buffer_size = 0
 
     for (var i = 0; i < saved_buffers.length; i++) {
@@ -151,9 +170,6 @@ export function save_state(cpu) {
     buffer_block_start = (buffer_block_start + 3) & ~3
     var total_size = buffer_block_start + total_buffer_size
 
-    //console.log("State: json_size=" + Math.ceil(buffer_block_start / 1024 / 1024) + "MB " +
-    //               "buffer_size=" + Math.ceil(total_buffer_size / 1024 / 1024) + "MB");
-
     var result = new ArrayBuffer(total_size)
 
     var header_block = new Int32Array(result, 0, STATE_INFO_BLOCK_START / 4)
@@ -168,9 +184,9 @@ export function save_state(cpu) {
     header_block[STATE_INDEX_INFO_LEN] = info_block.length
 
     for (var i = 0; i < saved_buffers.length; i++) {
-        var buffer = saved_buffers[i]
-        dbg_assert(buffer.constructor === Uint8Array)
-        buffer_block.set(buffer, buffer_infos[i].offset)
+        var buf = saved_buffers[i]
+        dbg_assert(buf.constructor === Uint8Array)
+        buffer_block.set(buf, buffer_infos[i].offset)
     }
 
     dbg_log('State: json size ' + (info_block.byteLength >> 10) + 'k')
@@ -181,18 +197,20 @@ export function save_state(cpu) {
     return result
 }
 
-/* @param {CPU} cpu */
-export function restore_state(cpu, state) {
-    state = new Uint8Array(state)
+export function restore_state(cpu: StateCpu, state: ArrayBuffer): void {
+    var state_bytes = new Uint8Array(state)
 
-    function read_state_header(state, check_length) {
-        const len = state.length
+    function read_state_header(
+        data: Uint8Array,
+        check_length: boolean,
+    ): number {
+        const len = data.length
 
         if (len < STATE_INFO_BLOCK_START) {
             throw new StateLoadError('Invalid length: ' + len)
         }
 
-        const header_block = new Int32Array(state.buffer, state.byteOffset, 4)
+        const header_block = new Int32Array(data.buffer, data.byteOffset, 4)
 
         if (header_block[STATE_INDEX_MAGIC] !== STATE_MAGIC) {
             throw new StateLoadError(
@@ -222,19 +240,19 @@ export function restore_state(cpu, state) {
         return header_block[STATE_INDEX_INFO_LEN]
     }
 
-    function read_info_block(info_block_buffer) {
+    function read_info_block(info_block_buffer: Uint8Array) {
         const info_block = new TextDecoder().decode(info_block_buffer)
         return JSON.parse(info_block)
     }
 
-    if (new Uint32Array(state.buffer, 0, 1)[0] === ZSTD_MAGIC) {
-        const ctx = cpu.zstd_create_ctx(state.length)
+    if (new Uint32Array(state_bytes.buffer, 0, 1)[0] === ZSTD_MAGIC) {
+        const ctx = cpu.zstd_create_ctx(state_bytes.length)
 
         new Uint8Array(
             cpu.wasm_memory.buffer,
             cpu.zstd_get_src_ptr(ctx) >>> 0,
-            state.length,
-        ).set(state)
+            state_bytes.length,
+        ).set(state_bytes)
 
         let ptr = cpu.zstd_read(ctx, 16)
         const header_block = new Uint8Array(
@@ -256,7 +274,7 @@ export function restore_state(cpu, state) {
 
         let state_object = info_block_obj['state']
         const buffer_infos = info_block_obj['buffer_infos']
-        const buffers = []
+        const buffers: ArrayBuffer[] = []
 
         let position = STATE_INFO_BLOCK_START + info_block_len
 
@@ -265,8 +283,8 @@ export function restore_state(cpu, state) {
             const CHUNK_SIZE = 1 * 1024 * 1024
 
             if (buffer_info.length > CHUNK_SIZE) {
-                const ptr = cpu.zstd_read(ctx, front_padding) >>> 0
-                cpu.zstd_read_free(ptr, front_padding)
+                const chunk_ptr = cpu.zstd_read(ctx, front_padding) >>> 0
+                cpu.zstd_read_free(chunk_ptr, front_padding)
 
                 const buffer = new Uint8Array(buffer_info.length)
                 buffers.push(buffer.buffer)
@@ -277,32 +295,35 @@ export function restore_state(cpu, state) {
                     dbg_assert(remaining >= 0)
                     const to_read = Math.min(remaining, CHUNK_SIZE)
 
-                    const ptr = cpu.zstd_read(ctx, to_read)
+                    const read_ptr = cpu.zstd_read(ctx, to_read)
                     buffer.set(
                         new Uint8Array(
                             cpu.wasm_memory.buffer,
-                            ptr >>> 0,
+                            read_ptr >>> 0,
                             to_read,
                         ),
                         have,
                     )
-                    cpu.zstd_read_free(ptr, to_read)
+                    cpu.zstd_read_free(read_ptr, to_read)
 
                     have += to_read
                 }
             } else {
-                const ptr = cpu.zstd_read(
+                const chunk_ptr = cpu.zstd_read(
                     ctx,
                     front_padding + buffer_info.length,
                 )
-                const offset = (ptr >>> 0) + front_padding
+                const offset = (chunk_ptr >>> 0) + front_padding
                 buffers.push(
                     cpu.wasm_memory.buffer.slice(
                         offset,
                         offset + buffer_info.length,
                     ),
                 )
-                cpu.zstd_read_free(ptr, front_padding + buffer_info.length)
+                cpu.zstd_read_free(
+                    chunk_ptr,
+                    front_padding + buffer_info.length,
+                )
             }
 
             position += front_padding + buffer_info.length
@@ -313,15 +334,15 @@ export function restore_state(cpu, state) {
 
         cpu.zstd_free_ctx(ctx)
     } else {
-        const info_block_len = read_state_header(state, true)
+        const info_block_len = read_state_header(state_bytes, true)
 
-        if (info_block_len < 0 || info_block_len + 12 >= state.length) {
+        if (info_block_len < 0 || info_block_len + 12 >= state_bytes.length) {
             throw new StateLoadError(
                 'Invalid info block length: ' + info_block_len,
             )
         }
 
-        const info_block_buffer = state.subarray(
+        const info_block_buffer = state_bytes.subarray(
             STATE_INFO_BLOCK_START,
             STATE_INFO_BLOCK_START + info_block_len,
         )
@@ -331,9 +352,10 @@ export function restore_state(cpu, state) {
         let buffer_block_start = STATE_INFO_BLOCK_START + info_block_len
         buffer_block_start = (buffer_block_start + 3) & ~3
 
-        const buffers = buffer_infos.map((buffer_info) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const buffers = buffer_infos.map((buffer_info: any) => {
             const offset = buffer_block_start + buffer_info.offset
-            return state.buffer.slice(offset, offset + buffer_info.length)
+            return state_bytes.buffer.slice(offset, offset + buffer_info.length)
         })
 
         state_object = restore_buffers(state_object, buffers)
