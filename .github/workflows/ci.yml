@@ -154,6 +154,7 @@ jobs:
 
       - name: Run expect tests
         run: |
+          make build/libwabt.cjs
           make -C tests/expect/tests
           bun tests/expect/run.ts
 
