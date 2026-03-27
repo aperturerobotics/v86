@@ -1,21 +1,47 @@
+declare var DEBUG: boolean
+
 import { dbg_log, LOG_LEVEL } from './log.js'
 
 // A minimal elf parser for loading 32 bit, x86, little endian, executable elf files
 
 const ELF_MAGIC = 0x464c457f
 
+interface FieldType {
+    size: number
+    get: (offset: number, littleEndian?: boolean) => number
+    set?: (offset: number, value: number, littleEndian?: boolean) => void
+}
+
+interface StructEntry {
+    name: string
+    type: FieldType
+    size: number
+    get: (offset: number, littleEndian?: boolean) => number
+    set:
+        | ((offset: number, value: number, littleEndian?: boolean) => void)
+        | undefined
+}
+
+type StructRecord = Record<string, number>
+
+export interface ElfResult {
+    header: StructRecord
+    program_headers: StructRecord[]
+    sections_headers: StructRecord[]
+}
+
 const types = DataView.prototype
-const U8 = { size: 1, get: types.getUint8, set: types.setUint8 }
-const U16 = { size: 2, get: types.getUint16, set: types.setUint16 }
-const U32 = { size: 4, get: types.getUint32, set: types.setUint32 }
-const pad = function (size) {
+const U8: FieldType = { size: 1, get: types.getUint8, set: types.setUint8 }
+const U16: FieldType = { size: 2, get: types.getUint16, set: types.setUint16 }
+const U32: FieldType = { size: 4, get: types.getUint32, set: types.setUint32 }
+const pad = function (size: number): FieldType {
     return {
         size,
-        get: (offset) => -1,
+        get: (_offset: number): number => -1,
     }
 }
 
-const Header = create_struct([
+const Header: StructEntry[] = create_struct([
     { magic: U32 },
 
     { class: U8 },
@@ -42,9 +68,11 @@ const Header = create_struct([
     { shnum: U16 },
     { shstrndx: U16 },
 ])
-console.assert(Header.reduce((a, entry) => a + entry.size, 0) === 52)
+console.assert(
+    Header.reduce((a: number, entry: StructEntry) => a + entry.size, 0) === 52,
+)
 
-const ProgramHeader = create_struct([
+const ProgramHeader: StructEntry[] = create_struct([
     { type: U32 },
     { offset: U32 },
     { vaddr: U32 },
@@ -54,9 +82,14 @@ const ProgramHeader = create_struct([
     { flags: U32 },
     { align: U32 },
 ])
-console.assert(ProgramHeader.reduce((a, entry) => a + entry.size, 0) === 32)
+console.assert(
+    ProgramHeader.reduce(
+        (a: number, entry: StructEntry) => a + entry.size,
+        0,
+    ) === 32,
+)
 
-const SectionHeader = create_struct([
+const SectionHeader: StructEntry[] = create_struct([
     { name: U32 },
     { type: U32 },
     { flags: U32 },
@@ -68,11 +101,16 @@ const SectionHeader = create_struct([
     { addralign: U32 },
     { entsize: U32 },
 ])
-console.assert(SectionHeader.reduce((a, entry) => a + entry.size, 0) === 40)
+console.assert(
+    SectionHeader.reduce(
+        (a: number, entry: StructEntry) => a + entry.size,
+        0,
+    ) === 40,
+)
 
 // From [{ name: type }, ...] to [{ name, type, size, get, set }, ...]
-function create_struct(struct) {
-    return struct.map(function (entry) {
+function create_struct(struct: Record<string, FieldType>[]): StructEntry[] {
+    return struct.map(function (entry: Record<string, FieldType>): StructEntry {
         const keys = Object.keys(entry)
         console.assert(keys.length === 1)
         const name = keys[0]
@@ -90,8 +128,7 @@ function create_struct(struct) {
     })
 }
 
-/** @param {ArrayBuffer} buffer */
-export function read_elf(buffer) {
+export function read_elf(buffer: ArrayBuffer): ElfResult {
     const view = new DataView(buffer)
 
     const [header, offset] = read_struct(view, Header)
@@ -99,7 +136,7 @@ export function read_elf(buffer) {
 
     if (DEBUG) {
         for (const key of Object.keys(header)) {
-            dbg_log(key + ': 0x' + (header[key].toString(16) >>> 0))
+            dbg_log(key + ': 0x' + (Number(header[key].toString(16)) >>> 0))
         }
     }
 
@@ -119,13 +156,13 @@ export function read_elf(buffer) {
     console.assert(header.phentsize === 32, 'Bad program header size')
     console.assert(header.shentsize === 40, 'Bad section header size')
 
-    const [program_headers, ph_offset] = read_structs(
+    const [program_headers, _ph_offset] = read_structs(
         view_slice(view, header.phoff, header.phentsize * header.phnum),
         ProgramHeader,
         header.phnum,
     )
 
-    const [sections_headers, sh_offset] = read_structs(
+    const [sections_headers, _sh_offset] = read_structs(
         view_slice(view, header.shoff, header.shentsize * header.shnum),
         SectionHeader,
         header.shnum,
@@ -174,8 +211,11 @@ export function read_elf(buffer) {
     }
 }
 
-function read_struct(view, Struct) {
-    const result = {}
+function read_struct(
+    view: DataView,
+    Struct: StructEntry[],
+): [StructRecord, number] {
+    const result: StructRecord = {}
     let offset = 0
     const LITTLE_ENDIAN = true // big endian not supported yet
 
@@ -189,8 +229,12 @@ function read_struct(view, Struct) {
     return [result, offset]
 }
 
-function read_structs(view, Struct, count) {
-    const result = []
+function read_structs(
+    view: DataView,
+    Struct: StructEntry[],
+    count: number,
+): [StructRecord[], number] {
+    const result: StructRecord[] = []
     let offset = 0
 
     for (var i = 0; i < count; i++) {
@@ -202,7 +246,6 @@ function read_structs(view, Struct, count) {
     return [result, offset]
 }
 
-/** @param {number=} length */
-function view_slice(view, offset, length) {
+function view_slice(view: DataView, offset: number, length?: number): DataView {
     return new DataView(view.buffer, view.byteOffset + offset, length)
 }

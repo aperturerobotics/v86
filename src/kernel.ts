@@ -37,7 +37,17 @@ const LINUX_BOOT_HDR_LOADFLAGS_QUIET_FLAG = 1 << 5
 const LINUX_BOOT_HDR_LOADFLAGS_KEEP_SEGMENTS = 1 << 6
 const LINUX_BOOT_HDR_LOADFLAGS_CAN_USE_HEAPS = 1 << 7
 
-export function load_kernel(mem8, bzimage, initrd, cmdline) {
+interface KernelBootRom {
+    name: string
+    data: Uint8Array
+}
+
+export function load_kernel(
+    mem8: Uint8Array,
+    bzimage: ArrayBuffer,
+    initrd: ArrayBuffer | undefined,
+    cmdline: string,
+): KernelBootRom | undefined {
     dbg_log('Trying to load kernel of size ' + bzimage.byteLength)
 
     const KERNEL_HIGH_ADDRESS = 0x100000
@@ -77,7 +87,7 @@ export function load_kernel(mem8, bzimage, initrd, cmdline) {
     dbg_assert(protocol >= 0x202) // older not supported by us
 
     const flags = bzimage8[LINUX_BOOT_HDR_LOADFLAGS]
-    dbg_assert(flags & LINUX_BOOT_HDR_LOADFLAGS_LOADED_HIGH) // low kernels not supported by us
+    dbg_assert(!!(flags & LINUX_BOOT_HDR_LOADFLAGS_LOADED_HIGH)) // low kernels not supported by us
 
     // we don't relocate the kernel, so we don't care much about most of these
 
@@ -183,7 +193,10 @@ export function load_kernel(mem8, bzimage, initrd, cmdline) {
     }
 }
 
-function make_linux_boot_rom(real_mode_segment, heap_end) {
+function make_linux_boot_rom(
+    real_mode_segment: number,
+    heap_end: number,
+): Uint8Array {
     // This rom will be executed by seabios after its initialisation
     // It sets up segment registers, the stack and calls the kernel real mode entry point
 

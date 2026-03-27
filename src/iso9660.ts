@@ -10,68 +10,76 @@ import { dbg_assert } from './log.js'
 
 const BLOCK_SIZE = 2 * 1024 // 0x800
 
-const FILE_FLAGS_HIDDEN = 1 << 0
 const FILE_FLAGS_DIRECTORY = 1 << 1
-const FILE_FLAGS_ASSOCIATED_FILE = 1 << 2
-const FILE_FLAGS_HAS_EXTENDED_ATTRIBUTE_RECORD = 1 << 3
-const FILE_FLAGS_HAS_PERMISSIONS = 1 << 4
-const FILE_FLAGS_NOT_FINAL = 1 << 7
 
-/**
- * @param {Array.<{ name: string, contents: Uint8Array}>} files
- */
-export function generate(files) {
+interface ISOBuffer {
+    buffer: Uint8Array
+    offset: number
+}
+
+interface ISOFile {
+    name: string
+    contents: Uint8Array
+}
+
+interface ISOFileWithLBA {
+    name: string
+    contents: Uint8Array
+    lba: number
+}
+
+export function generate(files: ISOFile[]): Uint8Array {
     const te = new TextEncoder()
     const date = new Date()
 
-    const write8 = (b, v) => {
+    const write8 = (b: ISOBuffer, v: number): void => {
         b.buffer[b.offset++] = v
     }
-    const write_le16 = (b, v) => {
+    const write_le16 = (b: ISOBuffer, v: number): void => {
         b.buffer[b.offset++] = v
         b.buffer[b.offset++] = v >> 8
     }
-    const write_le32 = (b, v) => {
+    const write_le32 = (b: ISOBuffer, v: number): void => {
         b.buffer[b.offset++] = v
         b.buffer[b.offset++] = v >> 8
         b.buffer[b.offset++] = v >> 16
         b.buffer[b.offset++] = v >> 24
     }
-    const write_be16 = (b, v) => {
+    const write_be16 = (b: ISOBuffer, v: number): void => {
         b.buffer[b.offset++] = v >> 8
         b.buffer[b.offset++] = v
     }
-    const write_be32 = (b, v) => {
+    const write_be32 = (b: ISOBuffer, v: number): void => {
         b.buffer[b.offset++] = v >> 24
         b.buffer[b.offset++] = v >> 16
         b.buffer[b.offset++] = v >> 8
         b.buffer[b.offset++] = v
     }
-    const write_lebe16 = (b, v) => {
+    const write_lebe16 = (b: ISOBuffer, v: number): void => {
         write_le16(b, v)
         write_be16(b, v)
     }
-    const write_lebe32 = (b, v) => {
+    const write_lebe32 = (b: ISOBuffer, v: number): void => {
         write_le32(b, v)
         write_be32(b, v)
     }
-    const fill = (b, len, v) => {
+    const fill = (b: ISOBuffer, len: number, v: number): void => {
         b.buffer.fill(v, b.offset, (b.offset += len))
     }
-    const write_ascii = (b, v) => {
+    const write_ascii = (b: ISOBuffer, v: string): void => {
         b.offset += te.encodeInto(v, b.buffer.subarray(b.offset)).written
     }
-    const write_padded_ascii = (b, len, v) => {
+    const write_padded_ascii = (b: ISOBuffer, len: number, v: string): void => {
         b.offset += te.encodeInto(
             v.padEnd(len),
             b.buffer.subarray(b.offset),
         ).written
     }
-    const write_dummy_date_ascii = (b) => {
+    const write_dummy_date_ascii = (b: ISOBuffer): void => {
         fill(b, 16, 0x20)
         write8(b, 0)
     }
-    const write_date_compact = (b) => {
+    const write_date_compact = (b: ISOBuffer): void => {
         write8(b, date.getUTCFullYear() - 1900)
         write8(b, 1 + date.getUTCMonth())
         write8(b, date.getUTCDate())
@@ -80,11 +88,18 @@ export function generate(files) {
         write8(b, date.getUTCSeconds())
         write8(b, 0)
     }
-    const skip = (b, len) => {
+    const skip = (b: ISOBuffer, len: number): void => {
         b.offset += len
     }
 
-    const write_record = (b, name, flags, is_special, lba, len) => {
+    const write_record = (
+        b: ISOBuffer,
+        name: string,
+        flags: number,
+        is_special: boolean,
+        lba: number,
+        len: number,
+    ): void => {
         if (!is_special) name = sanitise_filename(name) + ';1'
         // write name first and get its length
         const START = buffer.offset
@@ -110,12 +125,20 @@ export function generate(files) {
         skip(buffer, name_len + pad) // File name: was already written
         dbg_assert(buffer.offset === START + len_field)
     }
-    const write_special_directory_record = (b, name, lba, len) =>
-        write_record(b, name, FILE_FLAGS_DIRECTORY, true, lba, len)
-    const write_file_record = (b, name, lba, len) =>
-        write_record(b, name, 0, false, lba, len)
+    const write_special_directory_record = (
+        b: ISOBuffer,
+        name: string,
+        lba: number,
+        len: number,
+    ): void => write_record(b, name, FILE_FLAGS_DIRECTORY, true, lba, len)
+    const write_file_record = (
+        b: ISOBuffer,
+        name: string,
+        lba: number,
+        len: number,
+    ): void => write_record(b, name, 0, false, lba, len)
 
-    function round_byte_size_to_block_size(n) {
+    function round_byte_size_to_block_size(n: number): number {
         return 1 + Math.floor((n - 1) / BLOCK_SIZE)
     }
     dbg_assert(round_byte_size_to_block_size(0) === 0)
@@ -127,7 +150,7 @@ export function generate(files) {
     dbg_assert(round_byte_size_to_block_size(2 * BLOCK_SIZE + 1) === 3)
     dbg_assert(round_byte_size_to_block_size(10 * BLOCK_SIZE + 1) === 11)
 
-    function to_msdos_filename(name) {
+    function to_msdos_filename(name: string): string {
         const dot = name.lastIndexOf('.')
         if (dot === -1) return name.substr(0, 8)
         return name.substr(0, Math.min(8, dot)) + '.' + name.substr(dot + 1, 3)
@@ -136,7 +159,7 @@ export function generate(files) {
     dbg_assert(to_msdos_filename('abcdefghijkl.qwerty') === 'abcdefgh.qwe')
     dbg_assert(to_msdos_filename('abcdefghijkl') === 'abcdefgh')
 
-    function sanitise_filename(name) {
+    function sanitise_filename(name: string): string {
         return to_msdos_filename(name.toUpperCase().replace(/[^A-Z0-9_.]/g, ''))
     }
 
@@ -165,7 +188,7 @@ export function generate(files) {
     const ROOT_DIRECTORY_SIZE = BLOCK_SIZE
 
     let next_file_lba = 24
-    files = files.map(({ name, contents }) => {
+    const mapped_files: ISOFileWithLBA[] = files.map(({ name, contents }) => {
         const lba = next_file_lba
         next_file_lba += round_byte_size_to_block_size(contents.length)
         name = to_msdos_filename(name)
@@ -175,7 +198,7 @@ export function generate(files) {
     const N_LBAS = next_file_lba
     const total_size = N_LBAS * BLOCK_SIZE
 
-    const buffer = {
+    const buffer: ISOBuffer = {
         buffer: new Uint8Array(total_size),
         offset: SYSTEM_AREA_SIZE,
     }
@@ -264,7 +287,7 @@ export function generate(files) {
     buffer.offset = ROOT_DIRECTORY_LBA * BLOCK_SIZE
     write_special_directory_record(buffer, '\x00', ROOT_DIRECTORY_LBA, 0x800) // "."
     write_special_directory_record(buffer, '\x01', ROOT_DIRECTORY_LBA, 0x800) // ".."
-    for (const { name, contents, lba } of files) {
+    for (const { name, contents, lba } of mapped_files) {
         write_file_record(buffer, name, lba, contents.length)
     }
     // TODO: this assertion can fail if too many files are used as input
@@ -274,17 +297,14 @@ export function generate(files) {
     )
 
     // file contents
-    for (let { contents, lba } of files) {
+    for (let { contents, lba } of mapped_files) {
         buffer.buffer.set(contents, lba * BLOCK_SIZE)
     }
 
     return buffer.buffer
 }
 
-/**
- * @param {Uint8Array} buffer
- */
-export function is_probably_iso9660_file(buffer) {
+export function is_probably_iso9660_file(buffer: Uint8Array): boolean {
     return (
         buffer.length >= 17 * BLOCK_SIZE &&
         buffer[BLOCK_SIZE + 0] === 1 && // Primary Volume Descriptor
