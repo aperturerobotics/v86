@@ -6,7 +6,9 @@ import path from 'node:path'
 import url from 'node:url'
 
 import x86_table from './x86_table.js'
+import type { X86Encoding } from './x86_table.js'
 import * as rust_ast from './rust_ast.js'
+import type { Statement, SwitchCase } from './rust_ast.js'
 import {
     hex,
     get_switch_value,
@@ -21,7 +23,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true })
 
 const table_arg = get_switch_value('--table')
 const gen_all = get_switch_exist('--all')
-const to_generate = {
+const to_generate: Record<string, boolean> = {
     interpreter: gen_all || table_arg === 'interpreter',
     interpreter0f: gen_all || table_arg === 'interpreter0f',
 }
@@ -33,12 +35,15 @@ assert(
 
 gen_table()
 
-function wrap_imm_call(imm) {
+function wrap_imm_call(imm: string): string {
     return `match ${imm} { Ok(o) => o, Err(()) => return }`
 }
 
-function gen_read_imm_call(op, size_variant) {
-    let size = op.os || op.opcode % 2 === 1 ? size_variant : 8
+function gen_read_imm_call(
+    op: Readonly<X86Encoding>,
+    size_variant: number | undefined,
+): string | undefined {
+    const size = op.os || op.opcode % 2 === 1 ? size_variant : 8
 
     if (
         op.imm8 ||
@@ -72,8 +77,7 @@ function gen_read_imm_call(op, size_variant) {
     }
 }
 
-function gen_call(name, args) {
-    args = args || []
+function gen_call(name: string, args: string[] = []): string {
     return `${name}(${args.join(', ')});`
 }
 
@@ -81,7 +85,10 @@ function gen_call(name, args) {
  * Current naming scheme:
  * instr(16|32|)_(66|F2|F3)?0F?[0-9a-f]{2}(_[0-7])?(_mem|_reg|)
  */
-function make_instruction_name(encoding, size) {
+function make_instruction_name(
+    encoding: Readonly<X86Encoding>,
+    size: number | undefined,
+): string {
     const suffix = encoding.os ? String(size) : ''
     const opcode_hex = hex(encoding.opcode & 0xff, 2)
     const first_prefix =
@@ -115,15 +122,18 @@ function make_instruction_name(encoding, size) {
     return `${module}::instr${suffix}_${second_prefix}${first_prefix}${opcode_hex}${fixed_g_suffix}`
 }
 
-function gen_instruction_body(encodings, size) {
+function gen_instruction_body(
+    encodings: Readonly<X86Encoding>[],
+    size: number | undefined,
+): Statement[] {
     const encoding = encodings[0]
 
-    let has_66 = []
-    let has_F2 = []
-    let has_F3 = []
-    let no_prefix = []
+    const has_66: Readonly<X86Encoding>[] = []
+    const has_F2: Readonly<X86Encoding>[] = []
+    const has_F3: Readonly<X86Encoding>[] = []
+    const no_prefix: Readonly<X86Encoding>[] = []
 
-    for (let e of encodings) {
+    for (const e of encodings) {
         if (e.opcode >>> 16 === 0x66) has_66.push(e)
         else if (((e.opcode >>> 8) & 0xff) === 0xf2 || e.opcode >>> 16 === 0xf2)
             has_F2.push(e)
@@ -143,14 +153,14 @@ function gen_instruction_body(encodings, size) {
         assert((encoding.opcode & 0xff00) === 0x0f00)
     }
 
-    const code = []
+    const code: Statement[] = []
 
     if (encoding.e) {
         code.push(`let modrm_byte = ${wrap_imm_call('read_imm8()')};`)
     }
 
     if (has_66.length || has_F2.length || has_F3.length) {
-        const if_blocks = []
+        const if_blocks: { condition: string; body: Statement[] }[] = []
 
         if (has_66.length) {
             const body = gen_instruction_body_after_prefix(has_66, size)
@@ -179,26 +189,29 @@ function gen_instruction_body(encodings, size) {
             : '(prefix::PREFIX_F2 | prefix::PREFIX_F3)'
 
         const else_block = {
-            body: [].concat(
+            body: ([] as Statement[]).concat(
                 'dbg_assert!((prefixes_ & ' + check_prefixes + ') == 0);',
                 gen_instruction_body_after_prefix(no_prefix, size),
             ),
         }
 
-        return [].concat('let prefixes_ = *prefixes;', code, {
+        return ([] as Statement[]).concat('let prefixes_ = *prefixes;', code, {
             type: 'if-else',
             if_blocks,
             else_block,
         })
     } else {
-        return [].concat(
+        return ([] as Statement[]).concat(
             code,
             gen_instruction_body_after_prefix(encodings, size),
         )
     }
 }
 
-function gen_instruction_body_after_prefix(encodings, size) {
+function gen_instruction_body_after_prefix(
+    encodings: Readonly<X86Encoding>[],
+    size: number | undefined,
+): Statement[] {
     const encoding = encodings[0]
 
     if (encoding.fixed_g !== undefined) {
@@ -207,20 +220,26 @@ function gen_instruction_body_after_prefix(encodings, size) {
         // instruction with modrm byte where the middle 3 bits encode the instruction
 
         // group by opcode without prefix plus middle bits of modrm byte
-        let cases = encodings.reduce((cases_by_opcode, case_) => {
-            assert(typeof case_.fixed_g === 'number')
-            cases_by_opcode[(case_.opcode & 0xffff) | (case_.fixed_g << 16)] =
-                case_
-            return cases_by_opcode
-        }, Object.create(null))
-        cases = Object.values(cases).sort((e1, e2) => e1.fixed_g - e2.fixed_g)
+        let cases: Record<number, Readonly<X86Encoding>> = encodings.reduce(
+            (cases_by_opcode: Record<number, Readonly<X86Encoding>>, case_) => {
+                assert(typeof case_.fixed_g === 'number')
+                cases_by_opcode[
+                    (case_.opcode & 0xffff) | (case_.fixed_g << 16)
+                ] = case_
+                return cases_by_opcode
+            },
+            Object.create(null) as Record<number, Readonly<X86Encoding>>,
+        )
+        const sorted = Object.values(cases).sort(
+            (e1, e2) => (e1.fixed_g ?? 0) - (e2.fixed_g ?? 0),
+        )
 
         return [
             {
                 type: 'switch',
                 condition: 'modrm_byte >> 3 & 7',
-                cases: cases.map((case_) => {
-                    const fixed_g = case_.fixed_g
+                cases: sorted.map((case_): SwitchCase => {
+                    const fixed_g = case_.fixed_g!
                     const body = gen_instruction_body_after_fixed_g(case_, size)
 
                     return {
@@ -244,9 +263,12 @@ function gen_instruction_body_after_prefix(encodings, size) {
     }
 }
 
-function gen_instruction_body_after_fixed_g(encoding, size) {
-    const instruction_prefix = []
-    const instruction_postfix =
+function gen_instruction_body_after_fixed_g(
+    encoding: Readonly<X86Encoding>,
+    size: number | undefined,
+): Statement[] {
+    const instruction_prefix: Statement[] = []
+    const instruction_postfix: Statement[] =
         (encoding.block_boundary &&
             !encoding.no_block_boundary_in_interpreted) ||
         (!encoding.custom && encoding.e)
@@ -273,18 +295,18 @@ function gen_instruction_body_after_fixed_g(encoding, size) {
     if (encoding.e) {
         // instruction with modrm byte
 
-        const imm_read = gen_read_imm_call(encoding, size)
+        const imm_read_inner = gen_read_imm_call(encoding, size)
 
         if (encoding.ignore_mod) {
             assert(
-                !imm_read,
+                !imm_read_inner,
                 'Unexpected instruction (ignore mod with immediate value)',
             )
 
             // Has modrm byte, but the 2 mod bits are ignored and both
             // operands are always registers (0f20-0f24)
 
-            return [].concat(
+            return ([] as Statement[]).concat(
                 instruction_prefix,
                 gen_call(instruction_name, [
                     'modrm_byte & 7',
@@ -293,7 +315,7 @@ function gen_instruction_body_after_fixed_g(encoding, size) {
                 instruction_postfix,
             )
         } else {
-            let mem_args
+            let mem_args: string[]
 
             if (encoding.custom_modrm_resolve) {
                 // requires special handling around modrm_resolve
@@ -304,26 +326,26 @@ function gen_instruction_body_after_fixed_g(encoding, size) {
                 ]
             }
 
-            const reg_args = ['modrm_byte & 7']
+            const reg_args: string[] = ['modrm_byte & 7']
 
             if (encoding.fixed_g === undefined) {
                 mem_args.push('modrm_byte >> 3 & 7')
                 reg_args.push('modrm_byte >> 3 & 7')
             }
 
-            if (imm_read) {
-                mem_args.push(imm_read)
-                reg_args.push(imm_read)
+            if (imm_read_inner) {
+                mem_args.push(imm_read_inner)
+                reg_args.push(imm_read_inner)
             }
 
-            return [].concat(
+            return ([] as Statement[]).concat(
                 instruction_prefix,
                 {
                     type: 'if-else',
                     if_blocks: [
                         {
                             condition: 'modrm_byte < 0xC0',
-                            body: [].concat(
+                            body: ([] as Statement[]).concat(
                                 gen_call(`${instruction_name}_mem`, mem_args),
                             ),
                         },
@@ -336,7 +358,7 @@ function gen_instruction_body_after_fixed_g(encoding, size) {
             )
         }
     } else {
-        const args = []
+        const args: string[] = []
 
         if (imm_read) {
             args.push(imm_read)
@@ -350,7 +372,7 @@ function gen_instruction_body_after_fixed_g(encoding, size) {
             args.push(wrap_imm_call('read_imm8()'))
         }
 
-        return [].concat(
+        return ([] as Statement[]).concat(
             instruction_prefix,
             gen_call(instruction_name, args),
             instruction_postfix,
@@ -358,11 +380,15 @@ function gen_instruction_body_after_fixed_g(encoding, size) {
     }
 }
 
-function gen_table() {
-    let by_opcode = Object.create(null)
-    let by_opcode0f = Object.create(null)
+function gen_table(): void {
+    const by_opcode: Record<number, Readonly<X86Encoding>[]> = Object.create(
+        null,
+    ) as Record<number, Readonly<X86Encoding>[]>
+    const by_opcode0f: Record<number, Readonly<X86Encoding>[]> = Object.create(
+        null,
+    ) as Record<number, Readonly<X86Encoding>[]>
 
-    for (let o of x86_table) {
+    for (const o of x86_table) {
         let opcode = o.opcode
 
         if ((opcode & 0xff00) === 0x0f00) {
@@ -376,13 +402,13 @@ function gen_table() {
         }
     }
 
-    let cases = []
+    const cases: SwitchCase[] = []
     for (let opcode = 0; opcode < 0x100; opcode++) {
-        let encoding = by_opcode[opcode]
+        const encoding = by_opcode[opcode]
         assert(encoding && encoding.length)
 
-        let opcode_hex = hex(opcode, 2)
-        let opcode_high_hex = hex(opcode | 0x100, 2)
+        const opcode_hex = hex(opcode, 2)
+        const opcode_high_hex = hex(opcode | 0x100, 2)
 
         if (encoding[0].os) {
             cases.push({
@@ -400,7 +426,7 @@ function gen_table() {
             })
         }
     }
-    const table = {
+    const table: Statement = {
         type: 'switch',
         condition: 'opcode',
         cases,
@@ -409,7 +435,7 @@ function gen_table() {
         },
     }
     if (to_generate.interpreter) {
-        const code = [
+        const code: Statement[] = [
             '#![cfg_attr(rustfmt, rustfmt_skip)]',
 
             'use crate::cpu::cpu::{after_block_boundary, modrm_resolve};',
@@ -427,18 +453,20 @@ function gen_table() {
         finalize_table_rust(
             OUT_DIR,
             'interpreter.rs',
-            rust_ast.print_syntax_tree([].concat(code)).join('\n') + '\n',
+            rust_ast
+                .print_syntax_tree(([] as Statement[]).concat(code))
+                .join('\n') + '\n',
         )
     }
 
-    const cases0f = []
+    const cases0f: SwitchCase[] = []
     for (let opcode = 0; opcode < 0x100; opcode++) {
-        let encoding = by_opcode0f[opcode]
+        const encoding = by_opcode0f[opcode]
 
         assert(encoding && encoding.length)
 
-        let opcode_hex = hex(opcode, 2)
-        let opcode_high_hex = hex(opcode | 0x100, 2)
+        const opcode_hex = hex(opcode, 2)
+        const opcode_high_hex = hex(opcode | 0x100, 2)
 
         if (encoding[0].os) {
             cases0f.push({
@@ -450,7 +478,7 @@ function gen_table() {
                 body: gen_instruction_body(encoding, 32),
             })
         } else {
-            let block = {
+            const block: SwitchCase = {
                 conditions: [`0x${opcode_hex}`, `0x${opcode_high_hex}`],
                 body: gen_instruction_body(encoding, undefined),
             }
@@ -458,7 +486,7 @@ function gen_table() {
         }
     }
 
-    const table0f = {
+    const table0f: Statement = {
         type: 'switch',
         condition: 'opcode',
         cases: cases0f,
@@ -468,7 +496,7 @@ function gen_table() {
     }
 
     if (to_generate.interpreter0f) {
-        const code = [
+        const code: Statement[] = [
             '#![cfg_attr(rustfmt, rustfmt_skip)]',
 
             'use crate::cpu::cpu::{after_block_boundary, modrm_resolve};',
@@ -486,7 +514,9 @@ function gen_table() {
         finalize_table_rust(
             OUT_DIR,
             'interpreter0f.rs',
-            rust_ast.print_syntax_tree([].concat(code)).join('\n') + '\n',
+            rust_ast
+                .print_syntax_tree(([] as Statement[]).concat(code))
+                .join('\n') + '\n',
         )
     }
 }

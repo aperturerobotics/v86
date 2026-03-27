@@ -1,5 +1,41 @@
 // http://ref.x86asm.net/coder32.html
 
+export interface X86Encoding {
+    opcode: number
+    os?: number
+    e?: number
+    fixed_g?: number
+    custom?: number
+    custom_modrm_resolve?: number
+    custom_sti?: number
+    prefix?: number
+    block_boundary?: number
+    no_block_boundary_in_interpreted?: number
+    no_next_instruction?: number
+    absolute_jump?: number
+    jump_offset_imm?: number
+    conditional_jump?: number
+    imm8?: number
+    imm8s?: number
+    imm16?: number
+    imm1632?: number
+    imm32?: number
+    immaddr?: number
+    extra_imm8?: number
+    extra_imm16?: number
+    mask_flags?: number
+    skip?: number
+    skip_mem?: number
+    skip_reg?: number
+    is_string?: number
+    is_fpu?: number
+    task_switch_test?: number
+    sse?: number
+    reg_ud?: number
+    mem_ud?: number
+    ignore_mod?: number
+}
+
 const zf = 1 << 6
 const of = 1 << 11
 const cf = 1 << 0
@@ -53,7 +89,7 @@ const TESTS_ASSUME_INTEL = false
 // custom: will callback jit to generate custom code
 // block_boundary: may change eip in a way not handled by the jit
 // no_next_instruction: jit will stop analysing after instruction (e.g., unconditional jump, ret)
-const encodings = [
+const encodings: X86Encoding[] = [
     { opcode: 0x06, os: 1, custom: 1 },
     { opcode: 0x07, os: 1, skip: 1, block_boundary: 1 }, // pop es: block_boundary since it uses non-raising cpu exceptions
     { opcode: 0x0e, os: 1, custom: 1 },
@@ -1786,13 +1822,15 @@ for (let i = 0; i < 8; i++) {
     ])
 }
 
-encodings.sort((e1, e2) => {
-    let o1 =
+encodings.sort((e1: X86Encoding, e2: X86Encoding): number => {
+    const o1 =
         (e1.opcode & 0xff00) === 0x0f00 ? e1.opcode & 0xffff : e1.opcode & 0xff
-    let o2 =
+    const o2 =
         (e2.opcode & 0xff00) === 0x0f00 ? e2.opcode & 0xffff : e2.opcode & 0xff
-    return o1 - o2 || e1.fixed_g - e2.fixed_g
+    return o1 - o2 || (e1.fixed_g ?? 0) - (e2.fixed_g ?? 0)
 })
 
-const result = Object.freeze(encodings.map((entry) => Object.freeze(entry)))
+const result: readonly Readonly<X86Encoding>[] = Object.freeze(
+    encodings.map((entry) => Object.freeze(entry)),
+)
 export default result

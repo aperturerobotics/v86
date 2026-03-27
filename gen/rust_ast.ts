@@ -1,21 +1,51 @@
 import assert from 'node:assert/strict'
 
-function indent(lines, how_much) {
+export interface SwitchCase {
+    conditions: (string | number)[]
+    body: Statement[]
+}
+
+export interface DefaultCase {
+    varname?: string
+    body: Statement[]
+}
+
+export interface SwitchStatement {
+    type: 'switch'
+    condition: string
+    cases: SwitchCase[]
+    default_case?: DefaultCase
+}
+
+export interface IfBlock {
+    condition: string
+    body: Statement[]
+}
+
+export interface IfElseStatement {
+    type: 'if-else'
+    if_blocks: IfBlock[]
+    else_block?: { body: Statement[] }
+}
+
+export type Statement = string | SwitchStatement | IfElseStatement
+
+function indent(lines: string[], how_much: number): string[] {
     return lines.map((line) => ' '.repeat(how_much) + line)
 }
 
-export function print_syntax_tree(statements) {
-    let code = []
+export function print_syntax_tree(statements: Statement[]): string[] {
+    const code: string[] = []
 
-    for (let statement of statements) {
+    for (const statement of statements) {
         if (typeof statement === 'string') {
             code.push(statement)
         } else if (statement.type === 'switch') {
             assert(statement.condition)
 
-            const cases = []
+            const cases: string[] = []
 
-            for (let case_ of statement.cases) {
+            for (const case_ of statement.cases) {
                 assert(case_.conditions.length >= 1)
 
                 cases.push(case_.conditions.join(' | ') + ' => {')
@@ -42,7 +72,7 @@ export function print_syntax_tree(statements) {
         } else if (statement.type === 'if-else') {
             assert(statement.if_blocks.length >= 1)
 
-            let first_if_block = statement.if_blocks[0]
+            const first_if_block = statement.if_blocks[0]
 
             code.push(`if ${first_if_block.condition} {`)
             code.push.apply(
@@ -52,7 +82,7 @@ export function print_syntax_tree(statements) {
             code.push(`}`)
 
             for (let i = 1; i < statement.if_blocks.length; i++) {
-                let if_block = statement.if_blocks[i]
+                const if_block = statement.if_blocks[i]
 
                 code.push(`else if ${if_block.condition} {`)
                 code.push.apply(
@@ -73,9 +103,10 @@ export function print_syntax_tree(statements) {
         } else {
             assert(
                 false,
-                'Unexpected type: ' + statement.type,
-                'In:',
-                statement,
+                'Unexpected type: ' +
+                    (statement as { type: string }).type +
+                    ' In: ' +
+                    JSON.stringify(statement),
             )
         }
     }
