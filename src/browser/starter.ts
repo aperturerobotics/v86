@@ -969,6 +969,37 @@ export class V86 {
     }
 
     /**
+     * Grow guest memory to the specified size in bytes. Stops the VM,
+     * grows WASM linear memory, updates memory_size, clears the TLB,
+     * and resumes execution.
+     */
+    async growMemory(newSizeBytes: number): Promise<void> {
+        const cpu = this.v86.cpu
+        const currentSize = cpu.memory_size[0]
+        if (newSizeBytes <= currentSize) {
+            return
+        }
+
+        const wasRunning = this.cpu_is_running
+        if (wasRunning) {
+            await this.stop()
+        }
+
+        const WASM_PAGE_SIZE = 65536
+        const currentPages = cpu.wasm_memory.buffer.byteLength / WASM_PAGE_SIZE
+        const neededBytes = newSizeBytes - currentSize
+        const neededPages = Math.ceil(neededBytes / WASM_PAGE_SIZE)
+        cpu.wasm_memory.grow(neededPages)
+
+        cpu.memory_size[0] = newSizeBytes
+        cpu.full_clear_tlb()
+
+        if (wasRunning) {
+            await this.run()
+        }
+    }
+
+    /**
      * Stop emulation. Do nothing if emulator is not running. Can be asynchronous.
      */
     async stop(): Promise<void> {
