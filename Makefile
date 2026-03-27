@@ -208,15 +208,15 @@ src/rust/gen/analyzer0f.rs: $(ANALYZER_DEPENDENCIES)
 
 build/v86.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
-	-BLOCK_SIZE=K ls -l build/v86.wasm
 	cargo rustc --release $(CARGO_FLAGS)
 	cp build/wasm32-unknown-unknown/release/v86.wasm build/v86.wasm
-	-$(WASM_OPT) && wasm-opt -O2 --strip-debug build/v86.wasm -o build/v86.wasm
+ifeq ($(WASM_OPT),true)
+	wasm-opt -O2 --strip-debug build/v86.wasm -o build/v86.wasm
+endif
 	BLOCK_SIZE=K ls -l build/v86.wasm
 
 build/v86-debug.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
-	-BLOCK_SIZE=K ls -l build/v86-debug.wasm
 	cargo rustc $(CARGO_FLAGS)
 	cp build/wasm32-unknown-unknown/debug/v86.wasm build/v86-debug.wasm
 	BLOCK_SIZE=K ls -l build/v86-debug.wasm
@@ -224,7 +224,7 @@ build/v86-debug.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.t
 build/v86-fallback.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
 	cargo rustc --release $(CARGO_FLAGS_SAFE)
-	cp build/wasm32-unknown-unknown/release/v86.wasm build/v86-fallback.wasm || true
+	cp build/wasm32-unknown-unknown/release/v86.wasm build/v86-fallback.wasm
 
 debug-with-profiler: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/

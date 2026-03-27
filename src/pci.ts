@@ -311,6 +311,7 @@ export class PCI {
                 0x00,
                 0x00,
                 0x00,
+                0x00,
             ],
             pci_bars: [],
             name: '82441FX PMC',
@@ -711,7 +712,11 @@ export class PCI {
 
         // convert bytewise notation from lspci to double words
         const space = new Int32Array(64)
-        space.set(new Int32Array(new Uint8Array(device.pci_space).buffer))
+        const pci_bytes = new Uint8Array(device.pci_space)
+        const aligned_len = pci_bytes.length & ~3
+        if (aligned_len > 0) {
+            space.set(new Int32Array(pci_bytes.buffer, 0, aligned_len >> 2))
+        }
         this.device_spaces[device_id] = space
         this.devices[device_id] = device
 
