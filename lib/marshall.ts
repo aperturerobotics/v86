@@ -8,9 +8,34 @@ import { dbg_log } from './../src/log.js'
 const textde = new TextDecoder()
 const texten = new TextEncoder()
 
+// QID structure used in the 9P protocol.
+export interface QID {
+    type: number
+    version: number
+    path: number
+}
+
+// Tracks the current read offset during unmarshalling.
+export interface MarshallState {
+    offset: number
+}
+
+// Type codes used by Marshall/Unmarshall:
+// 'w' = word (4 bytes), 'd' = double word (8 bytes, only low 32 bits written),
+// 'h' = half word (2 bytes), 'b' = byte, 's' = length-prefixed string, 'Q' = QID (13 bytes).
+export type MarshallTypeCode = 'w' | 'd' | 'h' | 'b' | 's' | 'Q'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MarshallInput = any
+
 // Inserts data from an array to a byte aligned struct in memory
-export function Marshall(typelist, input, struct, offset) {
-    var item
+export function Marshall(
+    typelist: MarshallTypeCode[],
+    input: MarshallInput[],
+    struct: Uint8Array,
+    offset: number,
+): number {
+    var item: MarshallInput
     var size = 0
     for (var i = 0; i < typelist.length; i++) {
         item = input[i]
@@ -42,7 +67,7 @@ export function Marshall(typelist, input, struct, offset) {
                 struct[offset++] = item
                 size += 1
                 break
-            case 's':
+            case 's': {
                 var lengthoffset = offset
                 var length = 0
                 struct[offset++] = 0 // set the length later
@@ -58,6 +83,7 @@ export function Marshall(typelist, input, struct, offset) {
                 struct[lengthoffset + 0] = length & 0xff
                 struct[lengthoffset + 1] = (length >> 8) & 0xff
                 break
+            }
             case 'Q':
                 Marshall(
                     ['b', 'w', 'd'],
@@ -77,19 +103,26 @@ export function Marshall(typelist, input, struct, offset) {
 }
 
 // Extracts data from a byte aligned struct in memory to an array
-export function Unmarshall(typelist, struct, state) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function Unmarshall(
+    typelist: MarshallTypeCode[],
+    struct: Uint8Array,
+    state: MarshallState,
+): any[] {
     let offset = state.offset
-    var output = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    var output: any[] = []
     for (var i = 0; i < typelist.length; i++) {
         switch (typelist[i]) {
-            case 'w':
+            case 'w': {
                 var val = struct[offset++]
                 val += struct[offset++] << 8
                 val += struct[offset++] << 16
                 val += (struct[offset++] << 24) >>> 0
                 output.push(val)
                 break
-            case 'd':
+            }
+            case 'd': {
                 var val = struct[offset++]
                 val += struct[offset++] << 8
                 val += struct[offset++] << 16
@@ -97,14 +130,16 @@ export function Unmarshall(typelist, struct, state) {
                 offset += 4
                 output.push(val)
                 break
-            case 'h':
+            }
+            case 'h': {
                 var val = struct[offset++]
                 output.push(val + (struct[offset++] << 8))
                 break
+            }
             case 'b':
                 output.push(struct[offset++])
                 break
-            case 's':
+            case 's': {
                 var len = struct[offset++]
                 len += struct[offset++] << 8
 
@@ -112,7 +147,8 @@ export function Unmarshall(typelist, struct, state) {
                 offset += len
                 output.push(textde.decode(stringBytes))
                 break
-            case 'Q':
+            }
+            case 'Q': {
                 state.offset = offset
                 const qid = Unmarshall(['b', 'w', 'd'], struct, state)
                 offset = state.offset
@@ -122,6 +158,7 @@ export function Unmarshall(typelist, struct, state) {
                     path: qid[2],
                 })
                 break
+            }
             default:
                 dbg_log('Error in Unmarshall: Unknown type=' + typelist[i])
                 break

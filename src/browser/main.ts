@@ -1,3 +1,5 @@
+declare var DEBUG: boolean
+
 import { V86 } from './starter.js'
 import { LOG_NAMES } from '../const.js'
 import { SyncBuffer, SyncFileBuffer } from '../buffer.js'
@@ -27,22 +29,23 @@ const DEFAULT_NIC_TYPE = 'ne2k'
 
 const MAX_ARRAY_BUFFER_SIZE_MB = 2000
 
-function query_append() {
+function query_append(): string {
     const version = $('version')
     return version ? '?' + version.textContent : ''
 }
 
-function set_title(text) {
+function set_title(text: string): void {
     document.title = text + ' - v86' + (DEBUG ? ' - debug' : '')
     const description = document.querySelector('meta[name=description]')
-    description && (description.content = 'Running ' + text)
+    description &&
+        ((description as HTMLMetaElement).content = 'Running ' + text)
 }
 
-function bool_arg(x) {
+function bool_arg(x: string | null): boolean {
     return !!x && x !== '0'
 }
 
-function format_timestamp(time) {
+function format_timestamp(time: number): string {
     if (time < 60) {
         return time + 's'
     } else if (time < 3600) {
@@ -59,7 +62,7 @@ function format_timestamp(time) {
     }
 }
 
-function read_file(file) {
+function read_file(file: File): Promise<ArrayBuffer | string | null> {
     return new Promise((resolve, reject) => {
         const fr = new FileReader()
         fr.onload = () => resolve(fr.result)
@@ -70,9 +73,10 @@ function read_file(file) {
 
 let progress_ticks = 0
 
-function show_progress(e) {
-    const el = $('loading')
-    el.style.display = 'block'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function show_progress(e: any): void {
+    const el = $('loading')!
+    ;(el as HTMLElement).style.display = 'block'
 
     const file_name = e.file_name.split('?', 1)[0]
 
@@ -110,7 +114,7 @@ function show_progress(e) {
     el.textContent = line
 }
 
-function $(id) {
+function $(id: string): HTMLElement | null {
     return document.getElementById(id)
 }
 
@@ -126,10 +130,18 @@ const elements_to_restore = [
 for (const item of elements_to_restore) {
     try {
         window.localStorage.removeItem(item)
-    } catch (e) {}
+    } catch (_e) {}
 }
 
-function onload() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface OSProfile {
+    id: string
+    name: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [key: string]: any
+}
+
+function onload(): void {
     if (!window.WebAssembly) {
         alert(
             "Your browser is not supported because it doesn't support WebAssembly",
@@ -137,9 +149,9 @@ function onload() {
         return
     }
 
-    $('start_emulation').onclick = function (e) {
+    $('start_emulation')!.onclick = function (e) {
         start_emulation(null, null)
-        $('start_emulation').blur()
+        ;($('start_emulation') as HTMLElement).blur()
         e.preventDefault()
     }
 
@@ -149,7 +161,7 @@ function onload() {
 
     if (DEBUG && ON_LOCALHOST) {
         // don't use online relay in debug mode
-        $('relay_url').value = 'ws://localhost:8080/'
+        ;($('relay_url') as HTMLInputElement).value = 'ws://localhost:8080/'
     }
 
     const query_args = new URLSearchParams(location.search)
@@ -157,7 +169,7 @@ function onload() {
         query_args.get('cdn') || (ON_LOCALHOST ? 'images/' : '//i.copy.sh/')
 
     // Abandonware OS images are from https://winworldpc.com/library/operating-systems
-    const oses = [
+    const oses: OSProfile[] = [
         {
             id: 'archlinux',
             name: 'Arch Linux',
@@ -1701,7 +1713,7 @@ function onload() {
             element.onclick = (e) => {
                 if (!e.ctrlKey) {
                     e.preventDefault()
-                    element.blur()
+                    ;(element as HTMLElement).blur()
                     start_emulation(os, null)
                 }
             }
@@ -1719,16 +1731,18 @@ function onload() {
             start_emulation(null, query_args)
             return
         }
-    } else if (/^[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_]+$/g.test(profile)) {
+    } else if (/^[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_]+$/g.test(profile || '')) {
         // experimental: server that allows user-uploaded images
 
         const base = 'https://v86-user-images.b-cdn.net/' + profile
 
         fetch(base + '/profile.json')
-            .catch((e) => alert('Profile not found: ' + profile))
-            .then((response) => response.json())
-            .then((p) => {
-                function handle_image(o) {
+            .catch((_e) => alert('Profile not found: ' + profile))
+            .then((response) => (response as Response).json())
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .then((p: any) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                function handle_image(o: any) {
                     return (
                         o && {
                             url: base + '/' + o['url'],
@@ -1738,7 +1752,7 @@ function onload() {
                     )
                 }
 
-                const profile = {
+                const fetched_profile: OSProfile = {
                     id: p['id'],
                     name: p['name'],
                     memory_size: p['memory_size'],
@@ -1753,24 +1767,34 @@ function onload() {
                     initrd: handle_image(p['initrd']),
                 }
 
-                start_emulation(profile, query_args)
+                start_emulation(fetched_profile, query_args)
             })
     }
 
-    if (query_args.has('m')) $('memory_size').value = query_args.get('m')
+    if (query_args.has('m'))
+        ($('memory_size') as HTMLInputElement).value = query_args.get('m')!
     if (query_args.has('vram'))
-        $('vga_memory_size').value = query_args.get('vram')
+        ($('vga_memory_size') as HTMLInputElement).value =
+            query_args.get('vram')!
     if (query_args.has('relay_url'))
-        $('relay_url').value = query_args.get('relay_url')
+        ($('relay_url') as HTMLInputElement).value =
+            query_args.get('relay_url')!
     if (query_args.has('mute'))
-        $('disable_audio').checked = bool_arg(query_args.get('mute'))
+        ($('disable_audio') as HTMLInputElement).checked = bool_arg(
+            query_args.get('mute'),
+        )
     if (query_args.has('acpi'))
-        $('acpi').checked = bool_arg(query_args.get('acpi'))
+        ($('acpi') as HTMLInputElement).checked = bool_arg(
+            query_args.get('acpi'),
+        )
     if (query_args.has('boot_order'))
-        $('boot_order').value = query_args.get('boot_order')
+        ($('boot_order') as HTMLInputElement).value =
+            query_args.get('boot_order')!
     if (query_args.has('net_device_type'))
-        $('net_device_type').value = query_args.get('net_device_type')
-    if (query_args.has('mtu')) $('mtu').value = query_args.get('mtu')
+        ($('net_device_type') as HTMLInputElement).value =
+            query_args.get('net_device_type')!
+    if (query_args.has('mtu'))
+        ($('mtu') as HTMLInputElement).value = query_args.get('mtu')!
 
     for (const dev of ['fda', 'fdb']) {
         const toggle = $(dev + '_toggle_empty_disk')
@@ -1796,11 +1820,12 @@ function onload() {
                 if (n_sect === 2880) {
                     option.selected = true
                 }
-                option.value = n_bytes
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ;(option as any).value = n_bytes
                 select.appendChild(option)
             }
             // TODO (when closure compiler supports it): parent.parentNode.replaceChildren(...);
-            const parent = toggle.parentNode
+            const parent = toggle.parentNode as HTMLElement
             parent.innerHTML = ''
             parent.append('Empty disk of ', select)
         }
@@ -1820,35 +1845,46 @@ function onload() {
             input.step = '100'
             input.value = '100'
             // TODO (when closure compiler supports it): parent.parentNode.replaceChildren(...);
-            const parent = toggle.parentNode
+            const parent = toggle.parentNode as HTMLElement
             parent.innerHTML = ''
             parent.append('Empty disk of ', input, ' MB')
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const os_info = Array.from(document.querySelectorAll('#oses a.tr')).map(
         (element) => {
-            const [_, size_raw, unit] =
-                element.children[1].textContent.match(/([\d\.]+)\+? (\w+)/)
+            const match =
+                element.children[1].textContent!.match(/([\d\.]+)\+? (\w+)/)!
+            const [_, size_raw, unit] = match
             let size = +size_raw
             if (unit === 'MB') size *= 1024 * 1024
             else if (unit === 'KB') size *= 1024
             return {
-                element,
+                element: element as HTMLElement,
                 size,
                 graphical:
-                    element.children[2].firstChild.className === 'gui_icon',
-                family: element.children[3].textContent.replace(/-like/, ''),
+                    (element.children[2].firstChild as HTMLElement)
+                        .className === 'gui_icon',
+                family: element.children[3].textContent!.replace(/-like/, ''),
                 arch: element.children[4].textContent,
                 status: element.children[5].textContent,
                 source: element.children[6].textContent,
-                languages: new Set(element.children[7].textContent.split(', ')),
+                languages: new Set(
+                    element.children[7].textContent!.split(', '),
+                ),
                 medium: element.children[8].textContent,
             }
         },
     )
 
-    const known_filter = [
+    interface FilterDef {
+        id: string
+        condition: (os: (typeof os_info)[number]) => boolean
+        element?: HTMLInputElement
+    }
+
+    const known_filter: FilterDef[][] = [
         [
             // Family:
             { id: 'linux', condition: (os) => os.family === 'Linux' },
@@ -1911,10 +1947,12 @@ function onload() {
         ],
     ]
 
-    const defined_filter = []
+    const defined_filter: FilterDef[][] = []
     for (const known_category of known_filter) {
         const category = known_category.filter((filter) => {
-            const element = document.getElementById(`filter_${filter.id}`)
+            const element = document.getElementById(
+                `filter_${filter.id}`,
+            ) as HTMLInputElement | null
             if (element) {
                 element.onchange = update_filters
                 filter.element = element
@@ -1926,11 +1964,11 @@ function onload() {
         }
     }
 
-    function update_filters() {
-        const conjunction = []
+    function update_filters(): void {
+        const conjunction: FilterDef[][] = []
         for (const category of defined_filter) {
             const disjunction = category.filter(
-                (filter) => filter.element.checked,
+                (filter) => filter.element!.checked,
             )
             if (disjunction.length) {
                 conjunction.push(disjunction)
@@ -1946,20 +1984,21 @@ function onload() {
     }
 
     if ($('reset_filters')) {
-        $('reset_filters').onclick = function () {
+        $('reset_filters')!.onclick = function () {
             for (const element of document.querySelectorAll(
                 '#filter input[type=checkbox]',
             )) {
-                element.checked = false
+                ;(element as HTMLInputElement).checked = false
             }
             update_filters()
         }
     }
 
-    function set_proxy_value(id, value) {
+    function set_proxy_value(id: string, value: string): void {
         const elem = $(id)
         if (elem) {
-            elem.onclick = () => ($('relay_url').value = value)
+            elem.onclick = () =>
+                (($('relay_url') as HTMLInputElement).value = value)
         }
     }
     set_proxy_value('network_none', '')
@@ -1969,7 +2008,7 @@ function onload() {
     set_proxy_value('network_wisp', 'wisps://wisp.mercurywork.shop/v86/')
 }
 
-function debug_onload() {
+function debug_onload(): void {
     // called on window.onload, in debug mode
 
     const log_levels = $('log_levels')
@@ -1983,7 +2022,7 @@ function debug_onload() {
 
         if (mask === 1) continue
 
-        const name = LOG_NAMES[i][1].toLowerCase()
+        const name = (LOG_NAMES[i][1] as string).toLowerCase()
         const input = document.createElement('input')
         const label = document.createElement('label')
 
@@ -1991,10 +2030,11 @@ function debug_onload() {
 
         label.htmlFor = input.id = 'log_' + name
 
-        if (LOG_LEVEL & mask) {
+        if (LOG_LEVEL & (mask as number)) {
             input.checked = true
         }
-        input.mask = mask
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(input as any).mask = mask
 
         label.append(input, pads(name, 4) + ' ')
         log_levels.appendChild(label)
@@ -2005,8 +2045,9 @@ function debug_onload() {
     }
 
     log_levels.onchange = function (e) {
-        const target = e.target
-        const mask = target.mask
+        const target = e.target as HTMLInputElement
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mask = (target as any).mask as number
 
         if (target.checked) {
             set_log_level(LOG_LEVEL | mask)
@@ -2038,17 +2079,22 @@ if (document.readyState === 'complete') {
 // - the user clicked on a profile
 // - the ?profile= query parameter specified a valid profile
 // - the ?profile= query parameter was set to "custom" and at least one disk image was given
-function start_emulation(profile, query_args) {
-    $('boot_options').style.display = 'none'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function start_emulation(
+    profile: OSProfile | null,
+    query_args: URLSearchParams | null,
+): void {
+    $('boot_options')!.style.display = 'none'
 
-    const new_query_args = new Map()
+    const new_query_args = new Map<string, string>()
     new_query_args.set('profile', profile?.id || 'custom')
 
-    const settings = {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const settings: any = {}
 
     if (profile) {
         if (profile.state) {
-            $('reset').style.display = 'none'
+            $('reset')!.style.display = 'none'
         }
 
         set_title(profile.name)
@@ -2075,19 +2121,19 @@ function start_emulation(profile, query_args) {
         settings.net_device_type = profile.net_device_type
 
         if (!DEBUG && profile.homepage) {
-            $('description').style.display = 'block'
+            $('description')!.style.display = 'block'
             const link = document.createElement('a')
             link.href = profile.homepage
             link.textContent = profile.name
             link.target = '_blank'
-            $('description').append(document.createTextNode('Running '), link)
+            $('description')!.append(document.createTextNode('Running '), link)
         }
     }
 
     if (query_args) {
         // ignore certain settings when using a state image
         if (!settings.initial_state) {
-            let chunk_size = parseInt(query_args.get('chunk_size'), 10)
+            let chunk_size = parseInt(query_args.get('chunk_size')!, 10)
             if (chunk_size >= 0) {
                 chunk_size = Math.min(
                     4 * 1024 * 1024,
@@ -2100,14 +2146,15 @@ function start_emulation(profile, query_args) {
 
             if (query_args.has('hda.url')) {
                 settings.hda = {
-                    size: parseInt(query_args.get('hda.size'), 10) || undefined,
+                    size:
+                        parseInt(query_args.get('hda.size')!, 10) || undefined,
                     // TODO: synchronous if small?
                     url: query_args.get('hda.url'),
                     fixed_chunk_size: chunk_size,
                     async: true,
                 }
             } else if (query_args.has('hda.empty')) {
-                const empty_size = parseInt(query_args.get('hda.empty'), 10)
+                const empty_size = parseInt(query_args.get('hda.empty')!, 10)
                 if (empty_size > 0) {
                     settings.hda = { buffer: new ArrayBuffer(empty_size) }
                 }
@@ -2115,14 +2162,15 @@ function start_emulation(profile, query_args) {
 
             if (query_args.has('hdb.url')) {
                 settings.hdb = {
-                    size: parseInt(query_args.get('hdb.size'), 10) || undefined,
+                    size:
+                        parseInt(query_args.get('hdb.size')!, 10) || undefined,
                     // TODO: synchronous if small?
                     url: query_args.get('hdb.url'),
                     fixed_chunk_size: chunk_size,
                     async: true,
                 }
             } else if (query_args.has('hdb.empty')) {
-                const empty_size = parseInt(query_args.get('hdb.empty'), 10)
+                const empty_size = parseInt(query_args.get('hdb.empty')!, 10)
                 if (empty_size > 0) {
                     settings.hdb = { buffer: new ArrayBuffer(empty_size) }
                 }
@@ -2131,7 +2179,8 @@ function start_emulation(profile, query_args) {
             if (query_args.has('cdrom.url')) {
                 settings.cdrom = {
                     size:
-                        parseInt(query_args.get('cdrom.size'), 10) || undefined,
+                        parseInt(query_args.get('cdrom.size')!, 10) ||
+                        undefined,
                     url: query_args.get('cdrom.url'),
                     fixed_chunk_size: chunk_size,
                     async: true,
@@ -2140,18 +2189,19 @@ function start_emulation(profile, query_args) {
 
             if (query_args.has('fda.url')) {
                 settings.fda = {
-                    size: parseInt(query_args.get('fda.size'), 10) || undefined,
+                    size:
+                        parseInt(query_args.get('fda.size')!, 10) || undefined,
                     url: query_args.get('fda.url'),
                     async: false,
                 }
             }
 
-            const m = parseInt(query_args.get('m'), 10)
+            const m = parseInt(query_args.get('m')!, 10)
             if (m > 0) {
                 settings.memory_size = Math.max(16, m) * 1024 * 1024
             }
 
-            const vram = parseInt(query_args.get('vram'), 10)
+            const vram = parseInt(query_args.get('vram')!, 10)
             if (vram > 0) {
                 settings.vga_memory_size = vram * 1024 * 1024
             }
@@ -2162,7 +2212,7 @@ function start_emulation(profile, query_args) {
             settings.use_bochs_bios = query_args.get('bios') === 'bochs'
             settings.net_device_type =
                 query_args.get('net_device_type') || settings.net_device_type
-            settings.mtu = parseInt(query_args.get('mtu'), 10) || undefined
+            settings.mtu = parseInt(query_args.get('mtu')!, 10) || undefined
         }
 
         settings.relay_url = query_args.get('relay_url')
@@ -2171,7 +2221,7 @@ function start_emulation(profile, query_args) {
     }
 
     if (!settings.relay_url) {
-        settings.relay_url = $('relay_url').value
+        settings.relay_url = ($('relay_url') as HTMLInputElement).value
         if (!DEFAULT_NETWORKING_PROXIES.includes(settings.relay_url))
             new_query_args.set('relay_url', settings.relay_url)
     }
@@ -2180,44 +2230,48 @@ function start_emulation(profile, query_args) {
         settings.relay_url = 'fetch'
     }
     settings.disable_audio =
-        $('disable_audio').checked || settings.disable_audio
+        ($('disable_audio') as HTMLInputElement).checked ||
+        settings.disable_audio
     if (settings.disable_audio) new_query_args.set('mute', '1')
 
     // some settings cannot be overridden when a state image is used
     if (!settings.initial_state) {
-        const bios = $('bios').files[0]
+        const bios = ($('bios') as HTMLInputElement).files![0]
         if (bios) {
             settings.bios = { buffer: bios }
         }
-        const vga_bios = $('vga_bios').files[0]
+        const vga_bios = ($('vga_bios') as HTMLInputElement).files![0]
         if (vga_bios) {
             settings.vga_bios = { buffer: vga_bios }
         }
-        const fda = $('fda_image')?.files[0]
+        const fda = ($('fda_image') as HTMLInputElement | null)?.files?.[0]
         if (fda) {
             settings.fda = { buffer: fda }
         }
-        const fda_empty_size = +$('fda_empty_size')?.value
+        const fda_empty_size = +($('fda_empty_size') as HTMLInputElement | null)
+            ?.value!
         if (fda_empty_size) {
             settings.fda = { buffer: new ArrayBuffer(fda_empty_size) }
         }
-        const fdb = $('fdb_image')?.files[0]
+        const fdb = ($('fdb_image') as HTMLInputElement | null)?.files?.[0]
         if (fdb) {
             settings.fdb = { buffer: fdb }
         }
-        const fdb_empty_size = +$('fdb_empty_size')?.value
+        const fdb_empty_size = +($('fdb_empty_size') as HTMLInputElement | null)
+            ?.value!
         if (fdb_empty_size) {
             settings.fdb = { buffer: new ArrayBuffer(fdb_empty_size) }
         }
-        const cdrom = $('cdrom_image').files[0]
+        const cdrom = ($('cdrom_image') as HTMLInputElement).files![0]
         if (cdrom) {
             settings.cdrom = { buffer: cdrom }
         }
-        const hda = $('hda_image')?.files[0]
+        const hda = ($('hda_image') as HTMLInputElement | null)?.files?.[0]
         if (hda) {
             settings.hda = { buffer: hda }
         }
-        const hda_empty_size = +$('hda_empty_size')?.value
+        const hda_empty_size = +($('hda_empty_size') as HTMLInputElement | null)
+            ?.value!
         if (hda_empty_size) {
             const size =
                 Math.max(
@@ -2229,11 +2283,12 @@ function start_emulation(profile, query_args) {
             settings.hda = { buffer: new ArrayBuffer(size) }
             new_query_args.set('hda.empty', String(size))
         }
-        const hdb = $('hdb_image')?.files[0]
+        const hdb = ($('hdb_image') as HTMLInputElement | null)?.files?.[0]
         if (hdb) {
             settings.hdb = { buffer: hdb }
         }
-        const hdb_empty_size = +$('hdb_empty_size')?.value
+        const hdb_empty_size = +($('hdb_empty_size') as HTMLInputElement | null)
+            ?.value!
         if (hdb_empty_size) {
             const size =
                 Math.max(
@@ -2245,15 +2300,16 @@ function start_emulation(profile, query_args) {
             settings.hdb = { buffer: new ArrayBuffer(size) }
             new_query_args.set('hdb.empty', String(size))
         }
-        const multiboot = $('multiboot_image')?.files[0]
+        const multiboot = ($('multiboot_image') as HTMLInputElement | null)
+            ?.files?.[0]
         if (multiboot) {
             settings.multiboot = { buffer: multiboot }
         }
-        const bzimage = $('bzimage').files[0]
+        const bzimage = ($('bzimage') as HTMLInputElement).files![0]
         if (bzimage) {
             settings.bzimage = { buffer: bzimage }
         }
-        const initrd = $('initrd').files[0]
+        const initrd = ($('initrd') as HTMLInputElement).files![0]
         if (initrd) {
             settings.initrd = { buffer: initrd }
         }
@@ -2272,7 +2328,8 @@ function start_emulation(profile, query_args) {
         const MB = 1024 * 1024
 
         const memory_size =
-            parseInt($('memory_size').value, 10) || DEFAULT_MEMORY_SIZE
+            parseInt(($('memory_size') as HTMLInputElement).value, 10) ||
+            DEFAULT_MEMORY_SIZE
         if (!settings.memory_size || memory_size !== DEFAULT_MEMORY_SIZE) {
             settings.memory_size = memory_size * MB
         }
@@ -2280,7 +2337,8 @@ function start_emulation(profile, query_args) {
             new_query_args.set('m', String(memory_size))
 
         const vga_memory_size =
-            parseInt($('vga_memory_size').value, 10) || DEFAULT_VGA_MEMORY_SIZE
+            parseInt(($('vga_memory_size') as HTMLInputElement).value, 10) ||
+            DEFAULT_VGA_MEMORY_SIZE
         if (
             !settings.vga_memory_size ||
             vga_memory_size !== DEFAULT_VGA_MEMORY_SIZE
@@ -2291,7 +2349,8 @@ function start_emulation(profile, query_args) {
             new_query_args.set('vram', String(vga_memory_size))
 
         const boot_order =
-            parseInt($('boot_order').value, 16) || DEFAULT_BOOT_ORDER
+            parseInt(($('boot_order') as HTMLInputElement).value, 16) ||
+            DEFAULT_BOOT_ORDER
         if (!settings.boot_order || boot_order !== DEFAULT_BOOT_ORDER) {
             settings.boot_order = boot_order
         }
@@ -2299,7 +2358,7 @@ function start_emulation(profile, query_args) {
             new_query_args.set('boot_order', settings.boot_order.toString(16))
 
         if (settings.acpi === undefined) {
-            settings.acpi = $('acpi').checked
+            settings.acpi = ($('acpi') as HTMLInputElement).checked
             if (settings.acpi) new_query_args.set('acpi', '1')
         }
 
@@ -2320,14 +2379,16 @@ function start_emulation(profile, query_args) {
             settings.vga_bios = { url: BIOSPATH + 'bochs-vgabios.bin' }
         }
 
-        const nic_type = $('net_device_type').value || DEFAULT_NIC_TYPE
+        const nic_type =
+            ($('net_device_type') as HTMLInputElement).value || DEFAULT_NIC_TYPE
         if (!settings.net_device_type || nic_type !== DEFAULT_NIC_TYPE) {
             settings.net_device_type = nic_type
         }
         if (settings.net_device_type !== DEFAULT_NIC_TYPE)
             new_query_args.set('net_device_type', settings.net_device_type)
 
-        const mtu = parseInt($('mtu').value, 10) || DEFAULT_MTU
+        const mtu =
+            parseInt(($('mtu') as HTMLInputElement).value, 10) || DEFAULT_MTU
         if (!settings.mtu || mtu !== DEFAULT_MTU) {
             settings.mtu = mtu
         }
@@ -2380,7 +2441,8 @@ function start_emulation(profile, query_args) {
         cpuid_level: settings.cpuid_level,
     })
 
-    if (DEBUG) window.emulator = emulator
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (DEBUG) (window as any).emulator = emulator
 
     emulator.add_listener('emulator-ready', function () {
         if (DEBUG) {
@@ -2416,12 +2478,12 @@ function start_emulation(profile, query_args) {
                 'redox',
                 'beos',
                 '9legacy',
-            ].includes(profile?.id)
+            ].includes(profile?.id!)
         ) {
             setTimeout(() => {
                 // hack: Start automatically
                 emulator.keyboard_send_text(
-                    profile.id === '9legacy' ? '1\n' : '\n',
+                    profile!.id === '9legacy' ? '1\n' : '\n',
                 )
             }, 3000)
         }
@@ -2430,13 +2492,13 @@ function start_emulation(profile, query_args) {
 
         if (query_args?.has('c')) {
             setTimeout(function () {
-                emulator.keyboard_send_text(query_args.get('c') + '\n')
+                emulator.keyboard_send_text(query_args!.get('c') + '\n')
             }, 25)
         }
 
         if (query_args?.has('s')) {
             setTimeout(function () {
-                emulator.serial0_send(query_args.get('s') + '\n')
+                emulator.serial0_send(query_args!.get('s') + '\n')
             }, 25)
         }
 
@@ -2444,36 +2506,39 @@ function start_emulation(profile, query_args) {
             query_args?.has('theatre') &&
             bool_arg(query_args?.get('theatre'))
         ) {
-            $('toggle_theatre').click()
+            ;($('toggle_theatre') as HTMLElement).click()
         }
     })
 
     emulator.add_listener('emulator-loaded', function () {
         if (!emulator.v86.cpu.devices.cdrom) {
-            $('change_cdrom_image').style.display = 'none'
+            $('change_cdrom_image')!.style.display = 'none'
         }
     })
 
-    emulator.add_listener('download-progress', function (e) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('download-progress', function (e: any) {
         show_progress(e)
     })
 
-    emulator.add_listener('download-error', function (e) {
-        const el = $('loading')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('download-error', function (e: any) {
+        const el = $('loading')!
         el.style.display = 'block'
         el.textContent = `Loading ${e.file_name} failed. Check your connection and reload the page to try again.`
     })
 }
 
-/**
- * @param {Object} settings
- * @param {V86} emulator
- */
-function init_ui(profile, settings, emulator) {
-    $('loading').style.display = 'none'
-    $('runtime_options').style.display = 'block'
-    $('runtime_infos').style.display = 'block'
-    $('screen_container').style.display = 'block'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function init_ui(
+    profile: OSProfile | null,
+    settings: any,
+    emulator: V86,
+): void {
+    $('loading')!.style.display = 'none'
+    $('runtime_options')!.style.display = 'block'
+    $('runtime_infos')!.style.display = 'block'
+    $('screen_container')!.style.display = 'block'
 
     var filesystem_is_enabled = false
 
@@ -2487,58 +2552,58 @@ function init_ui(profile, settings, emulator) {
         })
     }
 
-    $('run').onclick = function () {
+    $('run')!.onclick = function () {
         if (emulator.is_running()) {
-            $('run').textContent = 'Run'
+            $('run')!.textContent = 'Run'
             emulator.stop()
         } else {
-            $('run').textContent = 'Pause'
+            $('run')!.textContent = 'Pause'
             emulator.run()
         }
 
-        $('run').blur()
+        ;($('run') as HTMLElement).blur()
     }
 
-    $('exit').onclick = function () {
+    $('exit')!.onclick = function () {
         emulator.destroy()
         const url = new URL(location.href)
         url.searchParams.delete('profile')
         location.href = url.pathname + url.search
     }
 
-    $('lock_mouse').onclick = function () {
+    $('lock_mouse')!.onclick = function () {
         if (!mouse_is_enabled) {
-            $('toggle_mouse').onclick()
+            ;($('toggle_mouse') as HTMLElement).click()
         }
 
         emulator.lock_mouse()
-        $('lock_mouse').blur()
+        ;($('lock_mouse') as HTMLElement).blur()
     }
 
     var mouse_is_enabled = true
 
-    $('toggle_mouse').onclick = function () {
+    $('toggle_mouse')!.onclick = function () {
         mouse_is_enabled = !mouse_is_enabled
 
         emulator.mouse_set_enabled(mouse_is_enabled)
-        $('toggle_mouse').textContent =
+        $('toggle_mouse')!.textContent =
             (mouse_is_enabled ? 'Dis' : 'En') + 'able mouse'
-        $('toggle_mouse').blur()
+        ;($('toggle_mouse') as HTMLElement).blur()
     }
 
     if (profile?.mouse_disabled_default) {
-        $('toggle_mouse').onclick()
+        ;($('toggle_mouse') as HTMLElement).click()
     }
 
     var theatre_mode = false
     var theatre_ui = true
     var theatre_zoom_to_fit = false
 
-    function zoom_to_fit() {
+    function zoom_to_fit(): void {
         // reset size
         emulator.screen_set_scale(1, 1)
 
-        const emulator_screen = $('screen_container').getBoundingClientRect()
+        const emulator_screen = $('screen_container')!.getBoundingClientRect()
         const emulator_screen_width = emulator_screen.width
         const emulator_screen_height = emulator_screen.height
 
@@ -2552,26 +2617,20 @@ function init_ui(profile, settings, emulator) {
         emulator.screen_set_scale(n, n)
     }
 
-    /**
-     * @param {boolean} enabled
-     */
-    function enable_theatre_ui(enabled) {
+    function enable_theatre_ui(enabled: boolean): void {
         theatre_ui = enabled
 
-        $('runtime_options').style.display = theatre_ui ? 'block' : 'none'
-        $('runtime_infos').style.display = theatre_ui ? 'block' : 'none'
-        $('filesystem_panel').style.display =
+        $('runtime_options')!.style.display = theatre_ui ? 'block' : 'none'
+        $('runtime_infos')!.style.display = theatre_ui ? 'block' : 'none'
+        $('filesystem_panel')!.style.display =
             filesystem_is_enabled && theatre_ui ? 'block' : 'none'
 
-        $('toggle_ui').textContent = (theatre_ui ? 'Hide' : 'Show') + ' UI'
+        $('toggle_ui')!.textContent = (theatre_ui ? 'Hide' : 'Show') + ' UI'
     }
 
-    /**
-     * @param {boolean} enabled
-     */
-    function enable_zoom_to_fit(enabled) {
+    function enable_zoom_to_fit(enabled: boolean): void {
         theatre_zoom_to_fit = enabled
-        $('scale').disabled = theatre_zoom_to_fit
+        ;($('scale') as HTMLInputElement).disabled = theatre_zoom_to_fit
 
         if (theatre_zoom_to_fit) {
             window.addEventListener('resize', zoom_to_fit, true)
@@ -2582,18 +2641,15 @@ function init_ui(profile, settings, emulator) {
             window.removeEventListener('resize', zoom_to_fit, true)
             emulator.remove_listener('screen-set-size', zoom_to_fit)
 
-            const n = parseFloat($('scale').value) || 1
+            const n = parseFloat(($('scale') as HTMLInputElement).value) || 1
             emulator.screen_set_scale(n, n)
         }
 
-        $('toggle_zoom_to_fit').textContent =
+        $('toggle_zoom_to_fit')!.textContent =
             (theatre_zoom_to_fit ? 'Dis' : 'En') + 'able zoom to fit'
     }
 
-    /**
-     * @param {boolean} enabled
-     */
-    function enable_theatre_mode(enabled) {
+    function enable_theatre_mode(enabled: boolean): void {
         theatre_mode = enabled
 
         if (!theatre_ui) {
@@ -2610,43 +2666,45 @@ function init_ui(profile, settings, emulator) {
             'runtime_infos',
             'filesystem_panel',
         ]) {
-            $(el).classList.toggle('theatre_' + el)
+            $(el)!.classList.toggle('theatre_' + el)
         }
 
-        $('theatre_background').style.display = theatre_mode ? 'block' : 'none'
-        $('toggle_zoom_to_fit').style.display = theatre_mode ? 'inline' : 'none'
-        $('toggle_ui').style.display = theatre_mode ? 'block' : 'none'
+        $('theatre_background')!.style.display = theatre_mode ? 'block' : 'none'
+        $('toggle_zoom_to_fit')!.style.display = theatre_mode
+            ? 'inline'
+            : 'none'
+        $('toggle_ui')!.style.display = theatre_mode ? 'block' : 'none'
 
         // hide scrolling
         document.body.style.overflow = theatre_mode ? 'hidden' : 'visible'
 
-        $('toggle_theatre').textContent =
+        $('toggle_theatre')!.textContent =
             (theatre_mode ? 'Dis' : 'En') + 'able theatre mode'
     }
 
-    $('toggle_ui').onclick = function () {
+    $('toggle_ui')!.onclick = function () {
         enable_theatre_ui(!theatre_ui)
-        $('toggle_ui').blur()
+        ;($('toggle_ui') as HTMLElement).blur()
     }
 
-    $('toggle_theatre').onclick = function () {
+    $('toggle_theatre')!.onclick = function () {
         enable_theatre_mode(!theatre_mode)
-        $('toggle_theatre').blur()
+        ;($('toggle_theatre') as HTMLElement).blur()
     }
 
-    $('toggle_zoom_to_fit').onclick = function () {
+    $('toggle_zoom_to_fit')!.onclick = function () {
         enable_zoom_to_fit(!theatre_zoom_to_fit)
-        $('toggle_zoom_to_fit').blur()
+        ;($('toggle_zoom_to_fit') as HTMLElement).blur()
     }
 
     var last_tick = 0
     var running_time = 0
     var last_instr_counter = 0
-    var interval = null
+    var interval: ReturnType<typeof setInterval> | null = null
     var os_uses_mouse = false
     var total_instructions = 0
 
-    function update_info() {
+    function update_info(): void {
         var now = Date.now()
 
         var instruction_counter = emulator.get_instruction_counter()
@@ -2666,13 +2724,13 @@ function init_ui(profile, settings, emulator) {
             running_time += delta_time
             last_tick = now
 
-            $('speed').textContent = (last_ips / 1000 / delta_time).toFixed(1)
-            $('avg_speed').textContent = (
+            $('speed')!.textContent = (last_ips / 1000 / delta_time).toFixed(1)
+            $('avg_speed')!.textContent = (
                 total_instructions /
                 1000 /
                 running_time
             ).toFixed(1)
-            $('running_time').textContent = format_timestamp(
+            $('running_time')!.textContent = format_timestamp(
                 (running_time / 1000) | 0,
             )
         }
@@ -2693,35 +2751,38 @@ function init_ui(profile, settings, emulator) {
     var stats_9p = {
         read: 0,
         write: 0,
-        files: [],
+        files: [] as string[],
     }
 
-    emulator.add_listener('9p-read-start', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('9p-read-start', function (args: any) {
         const file = args[0]
         stats_9p.files.push(file)
-        $('info_filesystem').style.display = 'block'
-        $('info_filesystem_status').textContent = 'Loading ...'
-        $('info_filesystem_last_file').textContent = file
+        $('info_filesystem')!.style.display = 'block'
+        $('info_filesystem_status')!.textContent = 'Loading ...'
+        $('info_filesystem_last_file')!.textContent = file
     })
-    emulator.add_listener('9p-read-end', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('9p-read-end', function (args: any) {
         stats_9p.read += args[1]
-        $('info_filesystem_bytes_read').textContent = stats_9p.read
+        $('info_filesystem_bytes_read')!.textContent = String(stats_9p.read)
 
         const file = args[0]
         stats_9p.files = stats_9p.files.filter((f) => f !== file)
 
         if (stats_9p.files[0]) {
-            $('info_filesystem_last_file').textContent = stats_9p.files[0]
+            $('info_filesystem_last_file')!.textContent = stats_9p.files[0]
         } else {
-            $('info_filesystem_status').textContent = 'Idle'
+            $('info_filesystem_status')!.textContent = 'Idle'
         }
     })
-    emulator.add_listener('9p-write-end', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('9p-write-end', function (args: any) {
         stats_9p.write += args[1]
-        $('info_filesystem_bytes_written').textContent = stats_9p.write
+        $('info_filesystem_bytes_written')!.textContent = String(stats_9p.write)
 
         if (!stats_9p.files[0]) {
-            $('info_filesystem_last_file').textContent = args[0]
+            $('info_filesystem_last_file')!.textContent = args[0]
         }
     })
 
@@ -2732,27 +2793,34 @@ function init_ui(profile, settings, emulator) {
         write_sectors: 0,
     }
 
-    $('ide_type').textContent = settings.cdrom ? ' (CD-ROM)' : ' (hard disk)'
+    $('ide_type')!.textContent = settings.cdrom ? ' (CD-ROM)' : ' (hard disk)'
 
     emulator.add_listener('ide-read-start', function () {
-        $('info_storage').style.display = 'block'
-        $('info_storage_status').textContent = 'Loading ...'
+        $('info_storage')!.style.display = 'block'
+        $('info_storage_status')!.textContent = 'Loading ...'
     })
-    emulator.add_listener('ide-read-end', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('ide-read-end', function (args: any) {
         stats_storage.read += args[1]
         stats_storage.read_sectors += args[2]
 
-        $('info_storage_status').textContent = 'Idle'
-        $('info_storage_bytes_read').textContent = stats_storage.read
-        $('info_storage_sectors_read').textContent = stats_storage.read_sectors
+        $('info_storage_status')!.textContent = 'Idle'
+        $('info_storage_bytes_read')!.textContent = String(stats_storage.read)
+        $('info_storage_sectors_read')!.textContent = String(
+            stats_storage.read_sectors,
+        )
     })
-    emulator.add_listener('ide-write-end', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('ide-write-end', function (args: any) {
         stats_storage.write += args[1]
         stats_storage.write_sectors += args[2]
 
-        $('info_storage_bytes_written').textContent = stats_storage.write
-        $('info_storage_sectors_written').textContent =
-            stats_storage.write_sectors
+        $('info_storage_bytes_written')!.textContent = String(
+            stats_storage.write,
+        )
+        $('info_storage_sectors_written')!.textContent = String(
+            stats_storage.write_sectors,
+        )
     })
 
     var stats_net = {
@@ -2760,36 +2828,43 @@ function init_ui(profile, settings, emulator) {
         bytes_received: 0,
     }
 
-    emulator.add_listener('eth-receive-end', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('eth-receive-end', function (args: any) {
         stats_net.bytes_received += args[0]
 
-        $('info_network').style.display = 'block'
-        $('info_network_bytes_received').textContent = stats_net.bytes_received
+        $('info_network')!.style.display = 'block'
+        $('info_network_bytes_received')!.textContent = String(
+            stats_net.bytes_received,
+        )
     })
-    emulator.add_listener('eth-transmit-end', function (args) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('eth-transmit-end', function (args: any) {
         stats_net.bytes_transmitted += args[0]
 
-        $('info_network').style.display = 'block'
-        $('info_network_bytes_transmitted').textContent =
-            stats_net.bytes_transmitted
+        $('info_network')!.style.display = 'block'
+        $('info_network_bytes_transmitted')!.textContent = String(
+            stats_net.bytes_transmitted,
+        )
     })
 
-    emulator.add_listener('mouse-enable', function (is_enabled) {
+    emulator.add_listener('mouse-enable', function (is_enabled: boolean) {
         os_uses_mouse = is_enabled
-        $('info_mouse_enabled').textContent = is_enabled ? 'Yes' : 'No'
+        $('info_mouse_enabled')!.textContent = is_enabled ? 'Yes' : 'No'
     })
 
-    emulator.add_listener('screen-set-size', function (args) {
-        const [w, h, bpp] = args
-        $('info_res').textContent = w + 'x' + h + (bpp ? 'x' + bpp : '')
-        $('info_vga_mode').textContent = bpp ? 'Graphical' : 'Text'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    emulator.add_listener('screen-set-size', function (args: any) {
+        const [w, h_val, bpp] = args
+        $('info_res')!.textContent = w + 'x' + h_val + (bpp ? 'x' + bpp : '')
+        $('info_vga_mode')!.textContent = bpp ? 'Graphical' : 'Text'
     })
 
-    $('reset').onclick = function () {
+    $('reset')!.onclick = function () {
         emulator.restart()
-        $('reset').blur()
+        ;($('reset') as HTMLElement).blur()
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     add_image_download_button(
         settings.hda,
         () => emulator.v86.cpu.devices.ide.primary.master.buffer,
@@ -2816,14 +2891,19 @@ function init_ui(profile, settings, emulator) {
         'cdrom',
     )
 
-    function add_image_download_button(obj, get_buffer, type) {
-        var elem = $('get_' + type + '_image')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function add_image_download_button(
+        obj: any,
+        get_buffer: () => any,
+        type: string,
+    ): void {
+        var elem = $('get_' + type + '_image')!
 
         if (!obj || obj.async) {
             elem.style.display = 'none'
         }
 
-        elem.onclick = function (e) {
+        elem.onclick = function (_e) {
             const buffer = get_buffer()
             const filename =
                 (buffer.file && buffer.file.name) ||
@@ -2836,7 +2916,8 @@ function init_ui(profile, settings, emulator) {
                 var file = buffer.get_as_file(filename)
                 download(file, filename)
             } else {
-                buffer.get_buffer(function (b) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                buffer.get_buffer(function (b: any) {
                     if (b) {
                         dump_file(b, filename)
                     } else {
@@ -2847,98 +2928,99 @@ function init_ui(profile, settings, emulator) {
                 })
             }
 
-            elem.blur()
+            ;(elem as HTMLElement).blur()
         }
     }
 
-    function pick_file(multiple) {
+    function pick_file(multiple: boolean): Promise<FileList> {
         return new Promise((resolve) => {
             const file_input = document.createElement('input')
             file_input.type = 'file'
             file_input.multiple = multiple
             file_input.onchange = function () {
-                resolve(file_input.files)
+                resolve(file_input.files!)
             }
             file_input.oncancel = function () {
-                resolve([])
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                resolve([] as any)
             }
             file_input.click()
         })
     }
 
-    $('change_fda_image').textContent = settings.fda
+    $('change_fda_image')!.textContent = settings.fda
         ? 'Eject floppy image'
         : 'Insert floppy image'
-    $('change_fda_image').ondragover = function (e) {
+    $('change_fda_image')!.ondragover = function (e) {
         e.preventDefault()
     }
-    async function insert_fda(files) {
+    async function insert_fda(files: FileList | File[]): Promise<void> {
         const file = files[0]
         if (file) {
             await emulator.set_fda({ buffer: file })
-            $('change_fda_image').textContent = 'Eject floppy image'
-            $('get_fda_image').style.display = 'block'
+            $('change_fda_image')!.textContent = 'Eject floppy image'
+            $('get_fda_image')!.style.display = 'block'
         }
     }
-    $('change_fda_image').ondrop = function (e) {
+    $('change_fda_image')!.ondrop = function (e) {
         e.preventDefault()
         if (emulator.get_disk_fda()) {
             emulator.eject_fda()
         }
-        insert_fda(e.dataTransfer.files)
+        insert_fda(e.dataTransfer!.files)
     }
-    $('change_fda_image').onclick = async function () {
+    $('change_fda_image')!.onclick = async function () {
         if (emulator.get_disk_fda()) {
             emulator.eject_fda()
-            $('change_fda_image').textContent = 'Insert floppy image'
-            $('get_fda_image').style.display = 'none'
+            $('change_fda_image')!.textContent = 'Insert floppy image'
+            $('get_fda_image')!.style.display = 'none'
         } else {
             const files = await pick_file(false)
             insert_fda(files)
         }
-        $('change_fda_image').blur()
+        ;($('change_fda_image') as HTMLElement).blur()
     }
 
-    $('change_fdb_image').textContent = settings.fdb
+    $('change_fdb_image')!.textContent = settings.fdb
         ? 'Eject second floppy image'
         : 'Insert second floppy image'
-    $('change_fdb_image').ondragover = function (e) {
+    $('change_fdb_image')!.ondragover = function (e) {
         e.preventDefault()
     }
-    async function insert_fdb(files) {
+    async function insert_fdb(files: FileList | File[]): Promise<void> {
         const file = files[0]
         if (file) {
             await emulator.set_fdb({ buffer: file })
-            $('change_fdb_image').textContent = 'Eject second floppy image'
-            $('get_fdb_image').style.display = 'block'
+            $('change_fdb_image')!.textContent = 'Eject second floppy image'
+            $('get_fdb_image')!.style.display = 'block'
         }
     }
-    $('change_fdb_image').ondrop = function (e) {
+    $('change_fdb_image')!.ondrop = function (e) {
         e.preventDefault()
         if (emulator.get_disk_fdb()) {
             emulator.eject_fdb()
         }
-        insert_fdb(e.dataTransfer.files)
+        insert_fdb(e.dataTransfer!.files)
     }
-    $('change_fdb_image').onclick = async function () {
+    $('change_fdb_image')!.onclick = async function () {
         if (emulator.get_disk_fdb()) {
             emulator.eject_fdb()
-            $('change_fdb_image').textContent = 'Insert second floppy image'
-            $('get_fdb_image').style.display = 'none'
+            $('change_fdb_image')!.textContent = 'Insert second floppy image'
+            $('get_fdb_image')!.style.display = 'none'
         } else {
             const files = await pick_file(false)
             insert_fdb(files)
         }
-        $('change_fdb_image').blur()
+        ;($('change_fdb_image') as HTMLElement).blur()
     }
 
-    $('change_cdrom_image').textContent = settings.cdrom
+    $('change_cdrom_image')!.textContent = settings.cdrom
         ? 'Eject CD image'
         : 'Insert CD image'
-    $('change_cdrom_image').ondragover = function (e) {
+    $('change_cdrom_image')!.ondragover = function (e) {
         e.preventDefault()
     }
-    async function insert_cdrom(files) {
+    async function insert_cdrom(files: FileList | File[]): Promise<void> {
         let buffer
 
         if (
@@ -2951,7 +3033,9 @@ function init_ui(profile, settings, emulator) {
             for (const file of files) {
                 files2.push({
                     name: file.name,
-                    contents: new Uint8Array(await read_file(file)),
+                    contents: new Uint8Array(
+                        (await read_file(file)) as ArrayBuffer,
+                    ),
                 })
             }
             buffer = iso9660.generate(files2).buffer
@@ -2959,36 +3043,36 @@ function init_ui(profile, settings, emulator) {
 
         if (buffer) {
             await emulator.set_cdrom({ buffer })
-            $('change_cdrom_image').textContent = 'Eject CD image'
-            $('get_cdrom_image').style.display = 'block'
+            $('change_cdrom_image')!.textContent = 'Eject CD image'
+            $('get_cdrom_image')!.style.display = 'block'
         }
     }
-    $('change_cdrom_image').ondrop = function (e) {
+    $('change_cdrom_image')!.ondrop = function (e) {
         e.preventDefault()
         if (emulator.v86.cpu.devices.cdrom.has_disk()) {
             emulator.eject_cdrom()
         }
-        insert_cdrom(e.dataTransfer.files)
+        insert_cdrom(e.dataTransfer!.files)
     }
-    $('change_cdrom_image').onclick = async function () {
+    $('change_cdrom_image')!.onclick = async function () {
         if (emulator.v86.cpu.devices.cdrom.has_disk()) {
             emulator.eject_cdrom()
-            $('change_cdrom_image').textContent = 'Insert CD image'
-            $('get_cdrom_image').style.display = 'none'
+            $('change_cdrom_image')!.textContent = 'Insert CD image'
+            $('get_cdrom_image')!.style.display = 'none'
         } else {
             const files = await pick_file(true)
             insert_cdrom(files)
         }
-        $('change_cdrom_image').blur()
+        ;($('change_cdrom_image') as HTMLElement).blur()
     }
 
-    $('memory_dump').onclick = function () {
+    $('memory_dump')!.onclick = function () {
         const mem8 = emulator.v86.cpu.mem8
         dump_file(
             new Uint8Array(mem8.buffer, mem8.byteOffset, mem8.length),
             'v86memory.bin',
         )
-        $('memory_dump').blur()
+        ;($('memory_dump') as HTMLElement).blur()
     }
 
     //$("memory_dump_dmp").onclick = function()
@@ -3017,53 +3101,52 @@ function init_ui(profile, settings, emulator) {
     //    $("memory_dump_dmp").blur();
     //};
 
-    /**
-     * @this HTMLElement
-     */
-    $('capture_network_traffic').onclick = function () {
-        this.textContent = '0 packets'
+    const capture_traffic_el = $('capture_network_traffic')!
+    capture_traffic_el.onclick = function () {
+        capture_traffic_el.textContent = '0 packets'
 
-        let capture = []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let capture: any[] = []
 
-        function do_capture(direction, data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        function do_capture(direction: string, data: any): void {
             capture.push({
                 direction,
                 time: performance.now() / 1000,
                 hex_dump: hex_dump(data),
             })
-            $('capture_network_traffic').textContent =
-                capture.length + ' packets'
+            capture_traffic_el.textContent = capture.length + ' packets'
         }
 
         emulator.emulator_bus.register(
             'net0-receive',
-            do_capture.bind(this, 'I'),
+            do_capture.bind(null, 'I'),
         )
-        emulator.add_listener('net0-send', do_capture.bind(this, 'O'))
+        emulator.add_listener('net0-send', do_capture.bind(null, 'O'))
 
-        this.onclick = function () {
+        capture_traffic_el.onclick = function () {
             const capture_raw = capture
-                .map(({ direction, time, hex_dump }) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                .map(({ direction, time, hex_dump: hd }: any) => {
                     // https://www.wireshark.org/docs/wsug_html_chunked/ChIOImportSection.html
                     // In wireshark: file -> import from hex -> tick direction indication, timestamp %s.%f
-                    return direction + ' ' + time.toFixed(6) + hex_dump + '\n'
+                    return direction + ' ' + time.toFixed(6) + hd + '\n'
                 })
                 .join('')
             dump_file(capture_raw, 'traffic.hex')
             capture = []
-            this.textContent = '0 packets'
+            capture_traffic_el.textContent = '0 packets'
         }
     }
 
-    $('save_state').onclick = async function () {
+    $('save_state')!.onclick = async function () {
         const result = await emulator.save_state()
         dump_file(result, 'v86state.bin')
-
-        $('save_state').blur()
+        ;($('save_state') as HTMLElement).blur()
     }
 
-    $('load_state').onclick = async function () {
-        $('load_state').blur()
+    $('load_state')!.onclick = async function () {
+        ;($('load_state') as HTMLElement).blur()
 
         const files = await pick_file(false)
         const file = files[0]
@@ -3081,7 +3164,7 @@ function init_ui(profile, settings, emulator) {
         const filereader = new FileReader()
         filereader.onload = async function (e) {
             try {
-                await emulator.restore_state(e.target.result)
+                await emulator.restore_state(e.target!.result as ArrayBuffer)
             } catch (err) {
                 alert(
                     'Something bad happened while restoring the state:\n' +
@@ -3099,7 +3182,7 @@ function init_ui(profile, settings, emulator) {
         filereader.readAsArrayBuffer(file)
     }
 
-    $('ctrlaltdel').onclick = function () {
+    $('ctrlaltdel')!.onclick = function () {
         emulator.keyboard_send_scancodes([
             0x1d, // ctrl
             0x38, // alt
@@ -3110,11 +3193,10 @@ function init_ui(profile, settings, emulator) {
             0x38 | 0x80,
             0x53 | 0x80,
         ])
-
-        $('ctrlaltdel').blur()
+        ;($('ctrlaltdel') as HTMLElement).blur()
     }
 
-    $('alttab').onclick = function () {
+    $('alttab')!.onclick = function () {
         emulator.keyboard_send_scancodes([
             0x38, // alt
             0x0f, // tab
@@ -3123,26 +3205,22 @@ function init_ui(profile, settings, emulator) {
         setTimeout(function () {
             emulator.keyboard_send_scancodes([0x38 | 0x80, 0x0f | 0x80])
         }, 100)
-
-        $('alttab').blur()
+        ;($('alttab') as HTMLElement).blur()
     }
 
-    /**
-     * @this HTMLElement
-     */
-    $('scale').onchange = function () {
-        var n = parseFloat(this.value)
+    $('scale')!.onchange = function () {
+        var n = parseFloat(($('scale') as HTMLInputElement).value)
 
         if (n || n > 0) {
             emulator.screen_set_scale(n, n)
         }
     }
 
-    $('fullscreen').onclick = function () {
+    $('fullscreen')!.onclick = function () {
         emulator.screen_go_fullscreen()
     }
 
-    $('screen_container').onclick = function (e) {
+    $('screen_container')!.onclick = function (e) {
         if (
             emulator.is_running() &&
             emulator.speaker_adapter?.audio_context?.state === 'suspended'
@@ -3155,9 +3233,10 @@ function init_ui(profile, settings, emulator) {
         }
 
         // allow text selection
-        if (window.getSelection().isCollapsed) {
-            const phone_keyboard =
-                document.getElementsByClassName('phone_keyboard')[0]
+        if (window.getSelection()!.isCollapsed) {
+            const phone_keyboard = document.getElementsByClassName(
+                'phone_keyboard',
+            )[0] as HTMLInputElement
 
             phone_keyboard.style.top = window.scrollY + e.clientY + 20 + 'px'
             phone_keyboard.style.left = window.scrollX + e.clientX + 'px'
@@ -3168,48 +3247,50 @@ function init_ui(profile, settings, emulator) {
         }
     }
 
-    const phone_keyboard = document.getElementsByClassName('phone_keyboard')[0]
+    const phone_keyboard = document.getElementsByClassName(
+        'phone_keyboard',
+    )[0] as HTMLElement
 
     phone_keyboard.setAttribute('autocorrect', 'off')
     phone_keyboard.setAttribute('autocapitalize', 'off')
     phone_keyboard.setAttribute('spellcheck', 'false')
     phone_keyboard.tabIndex = 0
 
-    $('take_screenshot').onclick = function () {
+    $('take_screenshot')!.onclick = function () {
         const image = emulator.screen_make_screenshot()
         try {
-            const w = window.open('')
-            w.document.write(image.outerHTML)
-        } catch (e) {}
-        $('take_screenshot').blur()
+            const w = window.open('')!
+            w.document.write(image!.outerHTML)
+        } catch (_e) {}
+        ;($('take_screenshot') as HTMLElement).blur()
     }
 
     if (emulator.speaker_adapter) {
         let is_muted = false
 
-        $('mute').onclick = function () {
+        $('mute')!.onclick = function () {
             if (is_muted) {
                 emulator.speaker_adapter.mixer.set_volume(1, undefined)
                 is_muted = false
-                $('mute').textContent = 'Mute'
+                $('mute')!.textContent = 'Mute'
             } else {
                 emulator.speaker_adapter.mixer.set_volume(0, undefined)
                 is_muted = true
-                $('mute').textContent = 'Unmute'
+                $('mute')!.textContent = 'Unmute'
             }
 
-            $('mute').blur()
+            ;($('mute') as HTMLElement).blur()
         }
     } else {
-        $('mute').remove()
+        $('mute')!.remove()
     }
 
     window.addEventListener('keydown', ctrl_w_rescue, false)
     window.addEventListener('keyup', ctrl_w_rescue, false)
     window.addEventListener('blur', ctrl_w_rescue, false)
 
-    function ctrl_w_rescue(e) {
-        if (e.ctrlKey) {
+    function ctrl_w_rescue(e: Event): void {
+        if ((e as KeyboardEvent).ctrlKey) {
             window.onbeforeunload = function () {
                 window.onbeforeunload = null
                 return 'CTRL-W cannot be sent to the emulator.'
@@ -3223,7 +3304,7 @@ function init_ui(profile, settings, emulator) {
     script.src = 'build/xterm.js'
     script.async = true
     script.onload = function () {
-        emulator.set_serial_container_xtermjs($('terminal'))
+        emulator.set_serial_container_xtermjs($('terminal')!)
         emulator.serial_adapter.term.write(
             'This is the serial console. Whatever you type or paste here will be sent to COM1',
         )
@@ -3231,66 +3312,62 @@ function init_ui(profile, settings, emulator) {
     document.body.appendChild(script)
 }
 
-function init_filesystem_panel(emulator) {
-    $('filesystem_panel').style.display = 'block'
+function init_filesystem_panel(emulator: V86): void {
+    $('filesystem_panel')!.style.display = 'block'
 
-    /**
-     * @this HTMLElement
-     */
-    $('filesystem_send_file').onchange = function () {
-        Array.prototype.forEach.call(
-            this.files,
-            function (file) {
-                var loader = new SyncFileBuffer(file)
-                loader.onload = function () {
-                    loader.get_buffer(async function (buffer) {
-                        await emulator.create_file(
-                            '/' + file.name,
-                            new Uint8Array(buffer),
-                        )
-                    })
-                }
-                loader.load()
-            },
-            this,
-        )
+    const fs_send_el = $('filesystem_send_file') as HTMLInputElement
+    fs_send_el.onchange = function () {
+        Array.prototype.forEach.call(fs_send_el.files, function (file: File) {
+            var loader = new SyncFileBuffer(file)
+            loader.onload = function () {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                loader.get_buffer(async function (buffer: any) {
+                    await emulator.create_file(
+                        '/' + file.name,
+                        new Uint8Array(buffer),
+                    )
+                })
+            }
+            loader.load()
+        })
 
-        this.value = ''
-        this.blur()
+        fs_send_el.value = ''
+        fs_send_el.blur()
     }
 
-    /**
-     * @this HTMLElement
-     */
-    $('filesystem_get_file').onkeypress = async function (e) {
+    const fs_get_el = $('filesystem_get_file') as HTMLInputElement
+    fs_get_el.onkeypress = async function (e: KeyboardEvent) {
         if (e.which !== 13) {
             return
         }
 
-        this.disabled = true
+        fs_get_el.disabled = true
 
         let result
         try {
-            result = await emulator.read_file(this.value)
+            result = await emulator.read_file(fs_get_el.value)
         } catch (err) {
             console.log(err)
         }
 
-        this.disabled = false
+        fs_get_el.disabled = false
 
         if (result) {
-            var filename = this.value.replace(/\/$/, '').split('/')
+            var filename: string | string[] = fs_get_el.value
+                .replace(/\/$/, '')
+                .split('/')
             filename = filename[filename.length - 1] || 'root'
 
-            dump_file(result, filename)
-            this.value = ''
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            dump_file(result as any, filename)
+            fs_get_el.value = ''
         } else {
             alert("Can't read file")
         }
     }
 }
 
-function debug_start(emulator) {
+function debug_start(emulator: V86): void {
     if (!emulator.v86) {
         return
     }
@@ -3298,39 +3375,42 @@ function debug_start(emulator) {
     // called as soon as soon as emulation is started, in debug mode
     const cpu = emulator.v86.cpu
 
-    $('dump_gdt').onclick = cpu.dump_gdt_ldt.bind(cpu)
-    $('dump_idt').onclick = cpu.dump_idt.bind(cpu)
-    $('dump_regs').onclick = () => {
+    $('dump_gdt')!.onclick = cpu.dump_gdt_ldt.bind(cpu)
+    $('dump_idt')!.onclick = cpu.dump_idt.bind(cpu)
+    $('dump_regs')!.onclick = () => {
         cpu.dump_regs_short()
         cpu.dump_state()
     }
-    $('dump_pt').onclick = cpu.dump_page_structures.bind(cpu)
+    $('dump_pt')!.onclick = cpu.dump_page_structures.bind(cpu)
 
-    $('dump_log').onclick = function () {
+    $('dump_log')!.onclick = function () {
         dump_file(log_data.join(''), 'v86.log')
     }
 
-    $('debug_panel').style.display = 'block'
+    $('debug_panel')!.style.display = 'block'
     setInterval(function () {
-        $('debug_panel').textContent =
+        $('debug_panel')!.textContent =
             cpu.get_regs_short().join('\n') + '\n' + cpu.debug_get_state()
 
-        $('dump_log').textContent =
+        $('dump_log')!.textContent =
             'Dump log' +
             (log_data.length ? ' (' + log_data.length + ' lines)' : '')
     }, 1000)
 
     // helps debugging
-    window.cpu = cpu
-    window.h = h
-    window.dump_file = dump_file
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).cpu = cpu
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).h = h
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).dump_file = dump_file
 }
 
-function onpopstate(e) {
+function onpopstate(_e: PopStateEvent): void {
     location.reload()
 }
 
-function push_state(params) {
+function push_state(params: Map<string, string>): void {
     if (window.history.pushState) {
         let search =
             '?' +

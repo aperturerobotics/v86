@@ -1,49 +1,24 @@
-// For Types Only
 import { BusConnector } from '../bus.js'
 
 const SHIFT_SCAN_CODE = 0x2a
 const SCAN_CODE_RELEASE = 0x80
 
-const PLATFOM_WINDOWS =
+const PLATFORM_WINDOWS =
     typeof window !== 'undefined' &&
     window.navigator.platform.toString().toLowerCase().search('win') >= 0
 
-/**
- * @constructor
- *
- * @param {BusConnector} bus
- */
-export function KeyboardAdapter(bus) {
-    var /**
-         * @type {!Object.<boolean>}
-         */
-        keys_pressed = {},
-        /**
-         * Deferred KeyboardEvent or null (Windows AltGr-Filter)
-         * @type {KeyboardEvent|Object|null}
-         */
-        deferred_event = null,
-        /**
-         * Deferred keydown state (Windows AltGr-Filter)
-         * @type {boolean}
-         */
-        deferred_keydown = false,
-        /**
-         * Timeout-ID returned by setTimeout() or 0 (Windows AltGr-Filter)
-         * @type {number}
-         */
-        deferred_timeout_id = 0,
-        keyboard = this
+export class KeyboardAdapter {
+    emu_enabled = true
+    bus: BusConnector
 
-    /**
-     * Set by emulator
-     * @type {boolean}
-     */
-    this.emu_enabled = true
+    private keys_pressed: Record<number, boolean> = {}
+    private deferred_event: KeyboardEvent | null = null
+    private deferred_keydown = false
+    private deferred_timeout_id: ReturnType<typeof setTimeout> | 0 = 0
 
     // Format:
     // Javascript event.keyCode -> make code
-    const charmap = new Uint16Array([
+    private charmap = new Uint16Array([
         0, 0, 0, 0, 0, 0, 0, 0,
         // 0x08: backspace, tab, enter
         0x0e, 0x0f, 0, 0, 0, 0x1c, 0, 0,
@@ -111,7 +86,7 @@ export function KeyboardAdapter(bus) {
     ])
 
     // ascii -> javascript event code (US layout)
-    const asciimap = {
+    private asciimap: Record<number, number> = {
         8: 8,
         10: 13,
         32: 32,
@@ -163,7 +138,7 @@ export function KeyboardAdapter(bus) {
         121: 89,
         122: 90,
     }
-    const asciimap_shift = {
+    private asciimap_shift: Record<number, number> = {
         33: 49,
         34: 222,
         35: 51,
@@ -213,13 +188,8 @@ export function KeyboardAdapter(bus) {
         126: 192,
     }
 
-    // From:
-    // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code#Code_values_on_Linux_%28X11%29_%28When_scancode_is_available%29
-    // http://stanislavs.org/helppc/make_codes.html
-    // http://www.computer-engineering.org/ps2keyboard/scancodes1.html
-    //
     // Mapping from event.code to scancode
-    var codemap = {
+    private codemap: Record<string, number> = {
         Escape: 0x0001,
         Digit1: 0x0002,
         Digit2: 0x0003,
@@ -311,7 +281,6 @@ export function KeyboardAdapter(bus) {
         NumpadEnter: 0xe01c,
         ControlRight: 0xe01d,
         NumpadDivide: 0xe035,
-        //"PrintScreen": 0x0063,
         AltRight: 0xe038,
         Home: 0xe047,
         ArrowUp: 0xe048,
@@ -331,159 +300,163 @@ export function KeyboardAdapter(bus) {
         ContextMenu: 0xe05d,
     }
 
-    this.bus = bus
+    private keyup_handler: (e: KeyboardEvent) => void
+    private keydown_handler: (e: KeyboardEvent) => void
+    private blur_handler: (e: FocusEvent) => void
+    private input_handler: (e: InputEvent) => void
 
-    this.destroy = function () {
+    constructor(bus: BusConnector) {
+        this.bus = bus
+
+        this.keyup_handler = (e: KeyboardEvent) => {
+            if (!e.altKey && this.keys_pressed[0x38]) {
+                this.handle_code(0x38, false)
+            }
+            return this.handler(e, false)
+        }
+
+        this.keydown_handler = (e: KeyboardEvent) => {
+            if (!e.altKey && this.keys_pressed[0x38]) {
+                this.handle_code(0x38, false)
+            }
+            return this.handler(e, true)
+        }
+
+        this.blur_handler = (_e: FocusEvent) => {
+            var keys = Object.keys(this.keys_pressed)
+
+            for (var i = 0; i < keys.length; i++) {
+                var key = +keys[i]
+
+                if (this.keys_pressed[key]) {
+                    this.handle_code(key, false)
+                }
+            }
+
+            this.keys_pressed = {}
+        }
+
+        this.input_handler = (e: InputEvent) => {
+            if (!this.bus) {
+                return
+            }
+
+            if (!this.may_handle(e)) {
+                return
+            }
+
+            switch (e.inputType) {
+                case 'insertText':
+                    if (e.data) {
+                        for (var i = 0; i < e.data.length; i++) {
+                            this.simulate_char(e.data[i])
+                        }
+                    }
+                    break
+
+                case 'insertLineBreak':
+                    this.simulate_press(13) // enter
+                    break
+
+                case 'deleteContentBackward':
+                    this.simulate_press(8) // backspace
+                    break
+            }
+        }
+
+        this.init()
+    }
+
+    destroy(): void {
         if (typeof window !== 'undefined') {
-            window.removeEventListener('keyup', keyup_handler, false)
-            window.removeEventListener('keydown', keydown_handler, false)
-            window.removeEventListener('blur', blur_handler, false)
-            window.removeEventListener('input', input_handler, false)
+            window.removeEventListener('keyup', this.keyup_handler, false)
+            window.removeEventListener('keydown', this.keydown_handler, false)
+            window.removeEventListener('blur', this.blur_handler, false)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            window.removeEventListener(
+                'input',
+                this.input_handler as any,
+                false,
+            )
         }
     }
 
-    this.init = function () {
+    init(): void {
         if (typeof window === 'undefined') {
             return
         }
         this.destroy()
 
-        window.addEventListener('keyup', keyup_handler, false)
-        window.addEventListener('keydown', keydown_handler, false)
-        window.addEventListener('blur', blur_handler, false)
-        window.addEventListener('input', input_handler, false)
-    }
-    this.init()
-
-    this.simulate_press = function (code) {
-        var ev = { keyCode: code }
-        handler(ev, true)
-        handler(ev, false)
+        window.addEventListener('keyup', this.keyup_handler, false)
+        window.addEventListener('keydown', this.keydown_handler, false)
+        window.addEventListener('blur', this.blur_handler, false)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        window.addEventListener('input', this.input_handler as any, false)
     }
 
-    this.simulate_char = function (chr) {
+    simulate_press(code: number): void {
+        var ev = { keyCode: code } as KeyboardEvent
+        this.handler(ev, true)
+        this.handler(ev, false)
+    }
+
+    simulate_char(chr: string): void {
         var code = chr.charCodeAt(0)
 
-        if (code in asciimap) {
-            this.simulate_press(asciimap[code])
-        } else if (code in asciimap_shift) {
-            send_to_controller(SHIFT_SCAN_CODE)
-            this.simulate_press(asciimap_shift[code])
-            send_to_controller(SHIFT_SCAN_CODE | SCAN_CODE_RELEASE)
+        if (code in this.asciimap) {
+            this.simulate_press(this.asciimap[code])
+        } else if (code in this.asciimap_shift) {
+            this.send_to_controller(SHIFT_SCAN_CODE)
+            this.simulate_press(this.asciimap_shift[code])
+            this.send_to_controller(SHIFT_SCAN_CODE | SCAN_CODE_RELEASE)
         } else {
             console.log('ascii -> keyCode not found: ', code, chr)
         }
     }
 
-    function may_handle(e) {
+    private may_handle(e: Event): boolean {
+        var ke = e as KeyboardEvent
         if (
-            e.shiftKey &&
-            e.ctrlKey &&
-            (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 75)
+            ke.shiftKey &&
+            ke.ctrlKey &&
+            (ke.keyCode === 73 || ke.keyCode === 74 || ke.keyCode === 75)
         ) {
-            // don't prevent opening chromium dev tools
-            // maybe add other important combinations here, too
             return false
         }
 
-        if (!keyboard.emu_enabled) {
+        if (!this.emu_enabled) {
             return false
         }
 
         if (e.target) {
-            // className shouldn't be hardcoded here
+            var target = e.target as HTMLElement
             return (
-                e.target.classList.contains('phone_keyboard') ||
-                (e.target.nodeName !== 'INPUT' &&
-                    e.target.nodeName !== 'TEXTAREA')
+                target.classList.contains('phone_keyboard') ||
+                (target.nodeName !== 'INPUT' && target.nodeName !== 'TEXTAREA')
             )
-        } else {
-            return true
         }
+
+        return true
     }
 
-    function translate(e) {
+    private translate(e: KeyboardEvent): number {
         if (e.code !== undefined) {
-            var code = codemap[e.code]
+            var code = this.codemap[e.code]
 
             if (code !== undefined) {
                 return code
             }
         }
 
-        return charmap[e.keyCode]
+        return this.charmap[e.keyCode]
     }
 
-    function keyup_handler(e) {
-        if (!e.altKey && keys_pressed[0x38]) {
-            // trigger ALT keyup manually - some browsers don't
-            // see issue #165
-            handle_code(0x38, false)
-        }
-        return handler(e, false)
-    }
-
-    function keydown_handler(e) {
-        if (!e.altKey && keys_pressed[0x38]) {
-            // trigger ALT keyup manually - some browsers don't
-            // see issue #165
-            handle_code(0x38, false)
-        }
-        return handler(e, true)
-    }
-
-    function blur_handler(e) {
-        // trigger keyup for all pressed keys
-        var keys = Object.keys(keys_pressed),
-            key
-
-        for (var i = 0; i < keys.length; i++) {
-            key = +keys[i]
-
-            if (keys_pressed[key]) {
-                handle_code(key, false)
-            }
-        }
-
-        keys_pressed = {}
-    }
-
-    function input_handler(e) {
-        if (!keyboard.bus) {
+    private handler(e: KeyboardEvent, keydown: boolean): false | undefined {
+        if (!this.bus) {
             return
         }
 
-        if (!may_handle(e)) {
-            return
-        }
-
-        switch (e.inputType) {
-            case 'insertText':
-                for (var i = 0; i < e.data.length; i++) {
-                    keyboard.simulate_char(e.data[i])
-                }
-                break
-
-            case 'insertLineBreak':
-                keyboard.simulate_press(13) // enter
-                break
-
-            case 'deleteContentBackward':
-                keyboard.simulate_press(8) // backspace
-                break
-        }
-    }
-
-    /**
-     * @param {KeyboardEvent|Object} e
-     * @param {boolean} keydown
-     */
-    function handler(e, keydown) {
-        if (!keyboard.bus) {
-            return
-        }
-
-        if (!may_handle(e)) {
+        if (!this.may_handle(e)) {
             return
         }
 
@@ -493,57 +466,53 @@ export function KeyboardAdapter(bus) {
             e.key === 'Unidentified' ||
             e.keyCode === 229
         ) {
-            // Handling mobile browsers and virtual keyboards
             return
         }
 
         e.preventDefault && e.preventDefault()
 
-        if (PLATFOM_WINDOWS) {
-            // Remove ControlLeft from key sequence [ControlLeft, AltRight] when
-            // AltGraph-key is pressed or released.
-            //
-            // NOTE: AltGraph is false for the 1st key (ControlLeft-Down), becomes
-            // true with the 2nd (AltRight-Down) and stays true until key AltGraph
-            // is released (AltRight-Up).
-            if (deferred_event) {
-                clearTimeout(deferred_timeout_id)
+        if (PLATFORM_WINDOWS) {
+            if (this.deferred_event) {
+                clearTimeout(this.deferred_timeout_id)
                 if (
                     !(
                         e.getModifierState &&
                         e.getModifierState('AltGraph') &&
-                        deferred_keydown === keydown &&
-                        deferred_event.code === 'ControlLeft' &&
+                        this.deferred_keydown === keydown &&
+                        this.deferred_event.code === 'ControlLeft' &&
                         e.code === 'AltRight'
                     )
                 ) {
-                    handle_event(deferred_event, deferred_keydown)
+                    this.handle_event(
+                        this.deferred_event,
+                        this.deferred_keydown,
+                    )
                 }
-                deferred_event = null
+                this.deferred_event = null
             }
 
             if (e.code === 'ControlLeft') {
-                // defer ControlLeft-Down/-Up until the next invocation of this method or 10ms have passed, whichever comes first
-                deferred_event = e
-                deferred_keydown = keydown
-                deferred_timeout_id = setTimeout(() => {
-                    handle_event(deferred_event, deferred_keydown)
-                    deferred_event = null
+                this.deferred_event = e
+                this.deferred_keydown = keydown
+                this.deferred_timeout_id = setTimeout(() => {
+                    if (this.deferred_event) {
+                        this.handle_event(
+                            this.deferred_event,
+                            this.deferred_keydown,
+                        )
+                        this.deferred_event = null
+                    }
                 }, 10)
                 return false
             }
         }
 
-        handle_event(e, keydown)
+        this.handle_event(e, keydown)
         return false
     }
 
-    /**
-     * @param {KeyboardEvent|Object} e
-     * @param {boolean} keydown
-     */
-    function handle_event(e, keydown) {
-        var code = translate(e)
+    private handle_event(e: KeyboardEvent, keydown: boolean): void {
+        var code = this.translate(e)
 
         if (!code) {
             console.log(
@@ -555,43 +524,39 @@ export function KeyboardAdapter(bus) {
             return
         }
 
-        handle_code(code, keydown, e.repeat)
+        this.handle_code(code, keydown, e.repeat)
     }
 
-    /**
-     * @param {number} code
-     * @param {boolean} keydown
-     * @param {boolean=} is_repeat
-     */
-    function handle_code(code, keydown, is_repeat) {
+    private handle_code(
+        code: number,
+        keydown: boolean,
+        is_repeat?: boolean,
+    ): void {
         if (keydown) {
-            if (keys_pressed[code] && !is_repeat) {
-                handle_code(code, false)
+            if (this.keys_pressed[code] && !is_repeat) {
+                this.handle_code(code, false)
             }
         } else {
-            if (!keys_pressed[code]) {
-                // stray keyup
+            if (!this.keys_pressed[code]) {
                 return
             }
         }
 
-        keys_pressed[code] = keydown
+        this.keys_pressed[code] = keydown
 
         if (!keydown) {
             code |= 0x80
         }
-        //console.log("Key: " + code.toString(16) + " from " + chr.toString(16) + " down=" + keydown);
 
         if (code > 0xff) {
-            // prefix
-            send_to_controller(code >> 8)
-            send_to_controller(code & 0xff)
+            this.send_to_controller(code >> 8)
+            this.send_to_controller(code & 0xff)
         } else {
-            send_to_controller(code)
+            this.send_to_controller(code)
         }
     }
 
-    function send_to_controller(code) {
-        keyboard.bus.send('keyboard-code', code)
+    private send_to_controller(code: number): void {
+        this.bus.send('keyboard-code', code)
     }
 }

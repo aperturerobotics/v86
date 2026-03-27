@@ -1510,20 +1510,17 @@ export class CPU {
             }
 
             if (settings.fs9p) {
-                // @ts-expect-error JS constructor function without type info
                 this.devices.virtio_9p = new Virtio9p(
                     settings.fs9p,
                     this,
                     device_bus,
                 )
             } else if (settings.handle9p) {
-                // @ts-expect-error JS constructor function without type info
                 this.devices.virtio_9p = new Virtio9pHandler(
                     settings.handle9p,
                     this,
                 )
             } else if (settings.proxy9p) {
-                // @ts-expect-error JS constructor function without type info
                 this.devices.virtio_9p = new Virtio9pProxy(
                     settings.proxy9p,
                     this,

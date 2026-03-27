@@ -1,10 +1,17 @@
 import { pads } from '../lib.js'
 
-export function stats_to_string(cpu) {
+interface CPU {
+    wm: {
+        exports: Record<string, Function>
+    }
+    wasm_memory: WebAssembly.Memory
+}
+
+export function stats_to_string(cpu: CPU): string {
     return print_misc_stats(cpu) + print_instruction_counts(cpu)
 }
 
-function print_misc_stats(cpu) {
+function print_misc_stats(cpu: CPU): string {
     let text = ''
 
     const stat_names = [
@@ -116,10 +123,10 @@ function print_misc_stats(cpu) {
     ]
 
     let j = 0
-    const stat_values = {}
+    const stat_values: Record<string, number> = {}
     for (let i = 0; i < stat_names.length; i++) {
         const name = stat_names[i]
-        let value
+        let value: number | string
         if (name.includes('/')) {
             j++ // skip profiler_stat_get
             const [left, right] = name.split('/')
@@ -127,7 +134,7 @@ function print_misc_stats(cpu) {
         } else {
             const stat = (stat_values[name] = cpu.wm.exports[
                 'profiler_stat_get'
-            ](i - j))
+            ](i - j) as number)
             value =
                 stat >= 100e6
                     ? Math.round(stat / 1e6) + 'm'
@@ -140,9 +147,12 @@ function print_misc_stats(cpu) {
 
     text += '\n'
 
-    const tlb_entries = cpu.wm.exports['get_valid_tlb_entries_count']()
-    const global_tlb_entries =
-        cpu.wm.exports['get_valid_global_tlb_entries_count']()
+    const tlb_entries = cpu.wm.exports[
+        'get_valid_tlb_entries_count'
+    ]() as number
+    const global_tlb_entries = cpu.wm.exports[
+        'get_valid_global_tlb_entries_count'
+    ]() as number
     const nonglobal_tlb_entries = tlb_entries - global_tlb_entries
 
     text +=
@@ -176,7 +186,7 @@ function print_misc_stats(cpu) {
     return text
 }
 
-function print_instruction_counts(cpu) {
+function print_instruction_counts(cpu: CPU): string {
     return [
         print_instruction_counts_offset(cpu, false, false, false, false),
         print_instruction_counts_offset(cpu, true, false, false, false),
@@ -186,16 +196,23 @@ function print_instruction_counts(cpu) {
     ].join('\n\n')
 }
 
+interface InstructionCount {
+    opcode: number
+    count: number
+    is_mem: boolean
+    fixed_g: number
+}
+
 function print_instruction_counts_offset(
-    cpu,
-    compiled,
-    jit_exit,
-    unguarded_register,
-    wasm_size,
-) {
+    cpu: CPU,
+    compiled: boolean,
+    jit_exit: boolean,
+    unguarded_register: boolean,
+    wasm_size: boolean,
+): string {
     let text = ''
 
-    const counts = []
+    const counts: InstructionCount[] = []
 
     const label = compiled
         ? 'compiled'
@@ -219,7 +236,7 @@ function print_instruction_counts_offset(
                     false,
                     is_mem,
                     fixed_g,
-                )
+                ) as number
                 counts.push({ opcode, count, is_mem, fixed_g })
 
                 const count_0f = cpu.wm.exports['get_opstats_buffer'](
@@ -231,7 +248,7 @@ function print_instruction_counts_offset(
                     true,
                     is_mem,
                     fixed_g,
-                )
+                ) as number
                 counts.push({
                     opcode: 0x0f00 | opcode,
                     count: count_0f,
