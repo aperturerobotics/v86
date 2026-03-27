@@ -1,3 +1,12 @@
+This is a fork of [copy/v86][upstream]. This fork migrates the JavaScript
+frontend to TypeScript, replaces Closure Compiler with esbuild + tsgo, and
+publishes as [`@aptre/v86`](https://www.npmjs.com/package/@aptre/v86) on npm
+with ESM and TypeScript declarations. The Rust/WASM backend is unchanged.
+
+[upstream]: https://github.com/copy/v86
+
+---
+
 [![Join the chat at https://gitter.im/copy/v86](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/copy/v86) or #v86 on [irc.libera.chat](https://libera.chat/)
 
 v86 emulates an x86-compatible CPU and hardware. Machine code is translated to
@@ -111,31 +120,37 @@ You can get some information on the disk images here: https://github.com/copy/im
 
 You need:
 
-- make
-- Rust with the wasm32-unknown-unknown target
+- [bun](https://bun.sh/) (runtime and package manager)
+- Rust with the wasm32-unknown-unknown target (for the WASM backend)
 - A version of clang compatible with Rust
-- java (for Closure Compiler, not necessary when using `debug.html`)
-- nodejs (a recent version is required, v16.11.1 is known to be working)
 - To run tests: nasm, gdb, qemu-system, gcc, libc-i386 and rustfmt
+
+```bash
+bun install        # install dependencies
+bun run build      # production build (ESM + browser bundle in dist/)
+bun run build:debug # debug build (with DEBUG=true)
+bun run typecheck  # type-check with tsgo
+bun run lint       # lint with eslint
+bun run format     # format with prettier
+bun run test       # run tests with vitest
+```
 
 See [tools/docker/test-image/Dockerfile](tools/docker/test-image/Dockerfile)
 for a full setup on Debian or
 [WSL](https://docs.microsoft.com/en-us/windows/wsl/install).
 
-- Run `make` to build the debug build (at `debug.html`).
-- Run `make all` to build the optimized build (at `index.html`).
-- ROM and disk images are loaded via XHR, so if you want to try out `index.html`
-  locally, make sure to serve it from a local webserver. You can use `make run`
-  to serve the files using Python's http module.
-- If you only want to embed v86 in a webpage you can use `libv86.js`. For usage,
-  check out the [examples](examples/). You can download it from the [release section](https://github.com/copy/v86/releases).
-- For bundler-based setups (Vite/React/Next/Webpack), there is also an official npm package:
-https://www.npmjs.com/package/v86
+The WASM backend is still built with `make` (Rust toolchain required).
+Run `make` for the debug build (`debug.html`) or `make all` for the optimized
+build (`index.html`). The TypeScript/JavaScript frontend is built with the bun
+commands above.
 
-  This package was originally maintained by [@giulioz](https://github.com/giulioz) (bundler-optimized fork) and was made "official" for this repo by [@basicer](https://github.com/basicer) with the author's permission.
-  It is published automatically from this repository via GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml), Upload release job) on pushes to `master` and uses `npm publish --provenance`.
-  
-  Install: `npm install v86`
+ROM and disk images are loaded via XHR, so if you want to try out the HTML
+files locally, make sure to serve them from a local webserver. You can use
+`make run` to serve the files using Python's http module.
+
+If you only want to embed v86 in a webpage, check out the
+[examples](examples/). For bundler-based setups, install from npm:
+`bun add @aptre/v86`
 
 ### Alternatively, to build using Docker
 
@@ -192,7 +207,7 @@ var emulator = new V86({
 });
 ```
 
-See [starter.js](src/browser/starter.js).
+See [starter.js](src/browser/starter.js) for the full API.
 
 ## License
 
