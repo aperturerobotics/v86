@@ -255,7 +255,7 @@ if ((cluster as any).isMaster) {
 
         assert(!emulator.running)
 
-        cpu.reboot_internal()
+        cpu.reboot()
         cpu.reset_memory()
         cpu.load_multiboot(
             fs.readFileSync(TEST_DIR + current_test.img_name).buffer,
