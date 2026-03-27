@@ -120,6 +120,8 @@ export const WASM_TABLE_SIZE = 900
 
 export const WASM_TABLE_OFFSET = 1024
 
+export const WASM_PAGE_SIZE = 65536
+
 export const MIXER_CHANNEL_LEFT = 0
 export const MIXER_CHANNEL_RIGHT = 1
 export const MIXER_CHANNEL_BOTH = 2

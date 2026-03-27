@@ -1,7 +1,12 @@
 declare let DEBUG: boolean
 
 import { v86 } from '../main.js'
-import { LOG_CPU, WASM_TABLE_OFFSET, WASM_TABLE_SIZE } from '../const.js'
+import {
+    LOG_CPU,
+    WASM_PAGE_SIZE,
+    WASM_TABLE_OFFSET,
+    WASM_TABLE_SIZE,
+} from '../const.js'
 import { get_rand_int, load_file, read_sized_string_from_mem } from '../lib.js'
 import { dbg_assert, dbg_trace, dbg_log, set_log_level } from '../log.js'
 import * as print_stats from './print_stats.js'
@@ -106,10 +111,12 @@ export class V86 {
         let cpu: any
 
         const memory_size = options.memory_size || 64 * 1024 * 1024
-        const WASM_PAGE_SIZE = 65536
-        // Initial pages: enough for the WASM runtime (256 pages = 16MB)
+        // Start with small initial (Rust allocator grows via memory.grow()
+        // as needed during allocate_memory). V8 lazy-commits grown pages,
+        // so host memory tracks actual guest use regardless.
+        // maximum reserves virtual address space upfront (cheap on both
+        // V8 and Firefox), enabling fast in-place grows later.
         const wasm_initial_pages = 256
-        // Maximum pages: memory_max option or 4x memory_size, capped at 2GB
         const memory_max = options.memory_max || memory_size * 4
         const wasm_max_pages = Math.min(
             Math.ceil(memory_max / WASM_PAGE_SIZE),
@@ -357,6 +364,7 @@ export class V86 {
         settings.mac_address_translation = options.mac_address_translation
         settings.cpuid_level = options.cpuid_level
         settings.virtio_balloon = options.virtio_balloon
+        settings.virtio_mem = options.virtio_mem
         settings.virtio_console = !!options.virtio_console
 
         const relay_url =
@@ -975,8 +983,7 @@ export class V86 {
      */
     async growMemory(newSizeBytes: number): Promise<void> {
         const cpu = this.v86.cpu
-        const currentSize = cpu.memory_size[0]
-        if (newSizeBytes <= currentSize) {
+        if (newSizeBytes <= cpu.memory_size[0]) {
             return
         }
 
@@ -985,13 +992,7 @@ export class V86 {
             await this.stop()
         }
 
-        const WASM_PAGE_SIZE = 65536
-        const currentPages = cpu.wasm_memory.buffer.byteLength / WASM_PAGE_SIZE
-        const neededBytes = newSizeBytes - currentSize
-        const neededPages = Math.ceil(neededBytes / WASM_PAGE_SIZE)
-        cpu.wasm_memory.grow(neededPages)
-
-        cpu.memory_size[0] = newSizeBytes
+        cpu.resize_memory(newSizeBytes)
         cpu.full_clear_tlb()
 
         if (wasRunning) {

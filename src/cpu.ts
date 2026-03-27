@@ -46,6 +46,7 @@ import {
     FLAG_DIRECTION,
     FLAG_OVERFLOW,
     FLAG_PARITY,
+    WASM_PAGE_SIZE,
 } from './const.js'
 import { h, view, pads, Bitmap, dump_file } from './lib.js'
 import { dbg_assert, dbg_log } from './log.js'
@@ -67,6 +68,7 @@ import { IDEController } from './ide.js'
 import { VirtioNet } from './virtio_net.js'
 import { VGAScreen } from './vga.js'
 import { VirtioBalloon } from './virtio_balloon.js'
+import { VirtioMem } from './virtio_mem.js'
 import { Virtio9p, Virtio9pHandler, Virtio9pProxy } from '../lib/9p.js'
 
 import { load_kernel } from './kernel.js'
@@ -129,6 +131,7 @@ interface CPUDevices {
     virtio_console: VirtioConsole
     virtio_net: VirtioNet
     virtio_balloon: VirtioBalloon
+    virtio_mem: VirtioMem
 }
 
 interface OptionRom {
@@ -338,12 +341,11 @@ export class CPU {
         this.name = 'cpu'
         this.stop_idling = stop_idling
         this.wm = wm
+        this.wasm_memory = wm.wasm_memory
         this.wasm_patch()
         this.create_jit_imports()
 
-        const memory = this.wm.wasm_memory
-
-        this.wasm_memory = memory
+        const memory = this.wasm_memory
 
         this.memory_size = view(Uint32Array, memory, 812, 1)
 
@@ -576,7 +578,7 @@ export class CPU {
 
         const jit_imports = Object.create(null)
 
-        jit_imports['m'] = this.wm.exports['memory']
+        jit_imports['m'] = this.wasm_memory
 
         for (const name of Object.keys(this.wm.exports)) {
             if (
@@ -810,6 +812,7 @@ export class CPU {
         state[86] = this.last_result
         state[87] = this.fpu_status_word
         state[88] = this.mxcsr
+        state[89] = this.devices.virtio_mem
 
         return state
     }
@@ -880,8 +883,33 @@ export class CPU {
         )
     }
 
+    resize_memory(new_size: number): void {
+        const mem8_offset = this.mem8.byteOffset
+        const needed_total = mem8_offset + new_size
+        const current_buffer = this.wasm_memory.buffer.byteLength
+        if (needed_total > current_buffer) {
+            const grow_pages = Math.ceil(
+                (needed_total - current_buffer) / WASM_PAGE_SIZE,
+            )
+            this.wasm_memory.grow(grow_pages)
+        }
+        this.mem8 = view(Uint8Array, this.wasm_memory, mem8_offset, new_size)
+        this.mem32s = view(
+            Int32Array,
+            this.wasm_memory,
+            mem8_offset,
+            new_size >> 2,
+        )
+        this.memory_size[0] = new_size
+    }
+
     set_state(state: any[]): void {
-        this.memory_size[0] = state[0]
+        const saved_memory_size = state[0]
+        if (saved_memory_size > this.memory_size[0]) {
+            this.resize_memory(saved_memory_size)
+        } else {
+            this.memory_size[0] = saved_memory_size
+        }
 
         if (this.mem8.length !== this.memory_size[0]) {
             console.warn(
@@ -1005,6 +1033,8 @@ export class CPU {
             this.devices.virtio_net.set_state(state[83])
         if (this.devices.virtio_balloon)
             this.devices.virtio_balloon.set_state(state[84])
+        if (this.devices.virtio_mem && state[89])
+            this.devices.virtio_mem.set_state(state[89])
 
         this.fw_value = state[62]
 
@@ -1245,9 +1275,14 @@ export class CPU {
             'Expected uninitialised memory',
         )
 
-        this.memory_size[0] = size
+        // Pre-grow WASM memory so the Rust allocator does not need to
+        // grow internally (it may fail for large allocs). memory.grow()
+        // detaches the old buffer, so memory_size must be set AFTER grow.
+        const grow_pages = Math.ceil(size / WASM_PAGE_SIZE)
+        this.wasm_memory.grow(grow_pages)
 
         const memory_offset = this.allocate_memory(size)
+        this.memory_size[0] = size
 
         this.mem8 = view(Uint8Array, this.wasm_memory, memory_offset, size)
         this.mem32s = view(
@@ -1517,6 +1552,16 @@ export class CPU {
                 this.devices.virtio_balloon = new VirtioBalloon(
                     this,
                     device_bus,
+                )
+            }
+            if (settings.virtio_mem) {
+                const mem_cfg = settings.virtio_mem
+                this.devices.virtio_mem = new VirtioMem(
+                    this,
+                    device_bus,
+                    mem_cfg.region_addr,
+                    mem_cfg.region_size,
+                    mem_cfg.block_size,
                 )
             }
 

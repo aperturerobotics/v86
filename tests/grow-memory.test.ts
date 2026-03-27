@@ -47,6 +47,15 @@ describe('growMemory', () => {
             expect(cpu.mem8[offset + i]).toBe((i * 37) & 0xff)
         }
 
+        // Write and read in new region
+        const new_offset = 64 * MB + 1024
+        for (let i = 0; i < 16; i++) {
+            cpu.mem8[new_offset + i] = (i * 53) & 0xff
+        }
+        for (let i = 0; i < 16; i++) {
+            expect(cpu.mem8[new_offset + i]).toBe((i * 53) & 0xff)
+        }
+
         await emulator.destroy()
     })
 })
