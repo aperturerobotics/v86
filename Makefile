@@ -6,11 +6,11 @@ INSTRUCTION_TABLES=src/rust/gen/jit.rs src/rust/gen/jit0f.rs \
 		   src/rust/gen/interpreter.rs src/rust/gen/interpreter0f.rs \
 		   src/rust/gen/analyzer.rs src/rust/gen/analyzer0f.rs \
 
-# Only the dependencies common to both generate_{jit,interpreter}.js
-GEN_DEPENDENCIES=$(filter-out gen/generate_interpreter.js gen/generate_jit.js gen/generate_analyzer.js, $(wildcard gen/*.js))
-JIT_DEPENDENCIES=$(GEN_DEPENDENCIES) gen/generate_jit.js
-INTERPRETER_DEPENDENCIES=$(GEN_DEPENDENCIES) gen/generate_interpreter.js
-ANALYZER_DEPENDENCIES=$(GEN_DEPENDENCIES) gen/generate_analyzer.js
+# Only the dependencies common to both generate_{jit,interpreter}.ts
+GEN_DEPENDENCIES=$(filter-out gen/generate_interpreter.ts gen/generate_jit.ts gen/generate_analyzer.ts, $(wildcard gen/*.ts))
+JIT_DEPENDENCIES=$(GEN_DEPENDENCIES) gen/generate_jit.ts
+INTERPRETER_DEPENDENCIES=$(GEN_DEPENDENCIES) gen/generate_interpreter.ts
+ANALYZER_DEPENDENCIES=$(GEN_DEPENDENCIES) gen/generate_analyzer.ts
 
 STRIP_DEBUG_FLAG=
 ifeq ($(STRIP_DEBUG),true)
@@ -192,31 +192,31 @@ build/libv86-debug.mjs: $(CLOSURE) src/*.js lib/*.js src/browser/*.js
 	ls -lh build/libv86-debug.mjs
 
 src/rust/gen/jit.rs: $(JIT_DEPENDENCIES)
-	./gen/generate_jit.js --output-dir build/ --table jit
+	bun gen/generate_jit.ts --output-dir build/ --table jit
 src/rust/gen/jit0f.rs: $(JIT_DEPENDENCIES)
-	./gen/generate_jit.js --output-dir build/ --table jit0f
+	bun gen/generate_jit.ts --output-dir build/ --table jit0f
 
 src/rust/gen/interpreter.rs: $(INTERPRETER_DEPENDENCIES)
-	./gen/generate_interpreter.js --output-dir build/ --table interpreter
+	bun gen/generate_interpreter.ts --output-dir build/ --table interpreter
 src/rust/gen/interpreter0f.rs: $(INTERPRETER_DEPENDENCIES)
-	./gen/generate_interpreter.js --output-dir build/ --table interpreter0f
+	bun gen/generate_interpreter.ts --output-dir build/ --table interpreter0f
 
 src/rust/gen/analyzer.rs: $(ANALYZER_DEPENDENCIES)
-	./gen/generate_analyzer.js --output-dir build/ --table analyzer
+	bun gen/generate_analyzer.ts --output-dir build/ --table analyzer
 src/rust/gen/analyzer0f.rs: $(ANALYZER_DEPENDENCIES)
-	./gen/generate_analyzer.js --output-dir build/ --table analyzer0f
+	bun gen/generate_analyzer.ts --output-dir build/ --table analyzer0f
 
 build/v86.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
-	-BLOCK_SIZE=K ls -l build/v86.wasm
 	cargo rustc --release $(CARGO_FLAGS)
 	cp build/wasm32-unknown-unknown/release/v86.wasm build/v86.wasm
-	-$(WASM_OPT) && wasm-opt -O2 --strip-debug build/v86.wasm -o build/v86.wasm
+ifeq ($(WASM_OPT),true)
+	wasm-opt -O2 --strip-debug build/v86.wasm -o build/v86.wasm
+endif
 	BLOCK_SIZE=K ls -l build/v86.wasm
 
 build/v86-debug.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
-	-BLOCK_SIZE=K ls -l build/v86-debug.wasm
 	cargo rustc $(CARGO_FLAGS)
 	cp build/wasm32-unknown-unknown/debug/v86.wasm build/v86-debug.wasm
 	BLOCK_SIZE=K ls -l build/v86-debug.wasm
@@ -224,7 +224,7 @@ build/v86-debug.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.t
 build/v86-fallback.wasm: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
 	cargo rustc --release $(CARGO_FLAGS_SAFE)
-	cp build/wasm32-unknown-unknown/release/v86.wasm build/v86-fallback.wasm || true
+	cp build/wasm32-unknown-unknown/release/v86.wasm build/v86-fallback.wasm
 
 debug-with-profiler: $(RUST_FILES) build/softfloat.o build/zstddeclib.o Cargo.toml
 	mkdir -p build/
@@ -300,80 +300,80 @@ build/integration-test-fs/fs.json: images/buildroot-bzimage68.bin
 	rm build/integration-test-fs/fs.tar build/integration-test-fs/bzImage build/integration-test-fs/initrd
 
 tests: build/v86-debug.wasm build/integration-test-fs/fs.json
-	LOG_LEVEL=3 ./tests/full/run.js
+	LOG_LEVEL=3 bun tests/full/run.ts
 
-tests-release: build/libv86.js build/v86.wasm build/integration-test-fs/fs.json
-	TEST_RELEASE_BUILD=1 ./tests/full/run.js
+tests-release: dist/v86.js build/v86.wasm build/integration-test-fs/fs.json
+	TEST_RELEASE_BUILD=1 bun tests/full/run.ts
 
 nasmtests: build/v86-debug.wasm
-	$(NASM_TEST_DIR)/create_tests.js
-	$(NASM_TEST_DIR)/gen_fixtures.js
-	$(NASM_TEST_DIR)/run.js
+	bun $(NASM_TEST_DIR)/create_tests.ts
+	bun $(NASM_TEST_DIR)/gen_fixtures.ts
+	bun $(NASM_TEST_DIR)/run.ts
 
 nasmtests-force-jit: build/v86-debug.wasm
-	$(NASM_TEST_DIR)/create_tests.js
-	$(NASM_TEST_DIR)/gen_fixtures.js
-	$(NASM_TEST_DIR)/run.js --force-jit
+	bun $(NASM_TEST_DIR)/create_tests.ts
+	bun $(NASM_TEST_DIR)/gen_fixtures.ts
+	FORCE_JIT=1 bun $(NASM_TEST_DIR)/run.ts
 
 jitpagingtests: build/v86-debug.wasm
 	$(MAKE) -C tests/jit-paging test-jit
-	./tests/jit-paging/run.js
+	bun tests/jit-paging/run.ts
 
 qemutests: build/v86-debug.wasm
 	$(MAKE) -C tests/qemu test-i386
-	LOG_LEVEL=3 ./tests/qemu/run.js build/qemu-test-result
-	./tests/qemu/run-qemu.js > build/qemu-test-reference
+	LOG_LEVEL=3 bun tests/qemu/run.ts build/qemu-test-result
+	bun tests/qemu/run-qemu.ts > build/qemu-test-reference
 	diff build/qemu-test-result build/qemu-test-reference
 
-qemutests-release: build/libv86.mjs build/v86.wasm
+qemutests-release: dist/v86.js build/v86.wasm
 	$(MAKE) -C tests/qemu test-i386
-	TEST_RELEASE_BUILD=1 time ./tests/qemu/run.js build/qemu-test-result
-	./tests/qemu/run-qemu.js > build/qemu-test-reference
+	TEST_RELEASE_BUILD=1 time bun tests/qemu/run.ts build/qemu-test-result
+	bun tests/qemu/run-qemu.ts > build/qemu-test-reference
 	diff build/qemu-test-result build/qemu-test-reference
 
 kvm-unit-test: build/v86-debug.wasm
 	(cd tests/kvm-unit-tests && ./configure && make x86/realmode.flat)
-	tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
+	bun tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
 
-kvm-unit-test-release: build/libv86.mjs build/v86.wasm
+kvm-unit-test-release: dist/v86.js build/v86.wasm
 	(cd tests/kvm-unit-tests && ./configure && make x86/realmode.flat)
-	TEST_RELEASE_BUILD=1 tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
+	TEST_RELEASE_BUILD=1 bun tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
 
 expect-tests: build/v86-debug.wasm build/libwabt.cjs
 	make -C tests/expect/tests
-	./tests/expect/run.js
+	bun tests/expect/run.ts
 
 devices-test: build/v86-debug.wasm
-	./tests/devices/virtio_9p.js
-	./tests/devices/virtio_console.js
-	./tests/devices/fetch_network.js
-	USE_VIRTIO=1 ./tests/devices/fetch_network.js
-	./tests/devices/wisp_network.js
-	./tests/devices/virtio_balloon.js
+	bun tests/devices/virtio_9p.ts
+	bun tests/devices/virtio_console.ts
+	bun tests/devices/fetch_network.ts
+	USE_VIRTIO=1 bun tests/devices/fetch_network.ts
+	bun tests/devices/wisp_network.ts
+	bun tests/devices/virtio_balloon.ts
 
 rust-test: $(RUST_FILES)
 	env RUSTFLAGS="-D warnings" RUST_BACKTRACE=full RUST_TEST_THREADS=1 cargo test -- --nocapture
-	./tests/rust/verify-wasmgen-dummy-output.js
+	bun tests/rust/verify-wasmgen-dummy-output.ts
 
 rust-test-intensive:
 	QUICKCHECK_TESTS=100000000 make rust-test
 
 api-tests: build/v86-debug.wasm
-	./tests/api/clean-shutdown.js
-	./tests/api/state.js
-	./tests/api/reset.js
-	./tests/api/floppy.js
-	./tests/api/cdrom-insert-eject.js
-	./tests/api/serial.js
-	./tests/api/reboot.js
-	./tests/api/pic.js
+	bun tests/api/clean-shutdown.ts
+	bun tests/api/state.ts
+	bun tests/api/reset.ts
+	bun tests/api/floppy.ts
+	bun tests/api/cdrom-insert-eject.ts
+	bun tests/api/serial.ts
+	bun tests/api/reboot.ts
+	bun tests/api/pic.ts
 
 all-tests: eslint kvm-unit-test qemutests qemutests-release jitpagingtests api-tests nasmtests nasmtests-force-jit rust-test tests expect-tests
 	# Skipping:
 	# - devices-test (hangs)
 
 eslint:
-	eslint src tests gen lib examples tools
+	bun run lint
 
 rustfmt: $(RUST_FILES)
 	cargo fmt --all -- --check --config fn_single_line=true,control_brace_style=ClosingNextLine
