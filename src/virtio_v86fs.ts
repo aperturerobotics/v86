@@ -100,6 +100,9 @@ const S_IFDIR = 0o040000
 const S_IFREG = 0o100000
 const S_IFLNK = 0o120000
 
+const textDecoder = new TextDecoder()
+const textEncoder = new TextEncoder()
+
 interface FsEntry {
     inode_id: number
     name: string
@@ -125,7 +128,7 @@ export const FS_ENTRIES: Map<number, FsEntry[]> = new Map([
                 dt_type: DT_REG,
                 mtime_sec: 1711500000,
                 mtime_nsec: 0,
-                content: new TextEncoder().encode('hello world\n'),
+                content: textEncoder.encode('hello world\n'),
             },
             {
                 inode_id: 3,
@@ -183,6 +186,15 @@ function packU64(buf: Uint8Array, offset: number, val: number): void {
 function packU16(buf: Uint8Array, offset: number, val: number): void {
     buf[offset] = val & 0xff
     buf[offset + 1] = (val >>> 8) & 0xff
+}
+
+function makeResp(size: number, type: number, tag: number): Uint8Array {
+    const resp = new Uint8Array(size)
+    packU32(resp, 0, size)
+    resp[4] = type
+    resp[5] = tag & 0xff
+    resp[6] = (tag >> 8) & 0xff
+    return resp
 }
 
 function readU16(buf: Uint8Array, offset: number): number {
@@ -337,7 +349,7 @@ export class VirtioV86FS {
         const name_len = readU16(req, 7)
         const name =
             name_len > 0
-                ? new TextDecoder().decode(req.subarray(9, 9 + name_len))
+                ? textDecoder.decode(req.subarray(9, 9 + name_len))
                 : ''
 
         console.log('v86fs: mount:', name || '(default)')
@@ -365,11 +377,7 @@ export class VirtioV86FS {
         const entry = INODE_MAP.get(inode_id)
 
         // GETATTR_R: [7B hdr] [4B status] [4B mode] [8B size] [8B mtime_sec] [4B mtime_nsec]
-        const resp = new Uint8Array(35)
-        packU32(resp, 0, 35)
-        resp[4] = V86FS_MSG_GETATTR_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(35, V86FS_MSG_GETATTR_R, tag)
 
         if (!entry) {
             packU32(resp, 7, V86FS_STATUS_ENOENT)
@@ -388,7 +396,7 @@ export class VirtioV86FS {
         // Parse LOOKUP: [7B hdr] [8B parent_id] [2B name_len] [name...]
         const parent_id = readU64(req, 7)
         const name_len = readU16(req, 15)
-        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+        const name = textDecoder.decode(req.subarray(17, 17 + name_len))
 
         const entries = FS_ENTRIES.get(parent_id)
         const entry = entries?.find((e) => e.name === name)
@@ -417,25 +425,24 @@ export class VirtioV86FS {
         const dir_id = readU64(req, 7)
         const entries = FS_ENTRIES.get(dir_id) || []
 
-        // Calculate response size
+        // Pre-encode names to avoid double encoding
+        const encodedNames = entries.map((e) => textEncoder.encode(e.name))
+
         // READDIR_R: [7B hdr] [4B status] [4B count] [entries...]
         // Each entry: [8B inode_id] [1B type] [2B name_len] [name...]
         let size = 7 + 4 + 4
-        for (const e of entries) {
-            size += 8 + 1 + 2 + new TextEncoder().encode(e.name).length
+        for (const nameBytes of encodedNames) {
+            size += 8 + 1 + 2 + nameBytes.length
         }
 
-        const resp = new Uint8Array(size)
-        packU32(resp, 0, size)
-        resp[4] = V86FS_MSG_READDIR_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(size, V86FS_MSG_READDIR_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU32(resp, 11, entries.length)
 
         let off = 15
-        for (const e of entries) {
-            const nameBytes = new TextEncoder().encode(e.name)
+        for (let i = 0; i < entries.length; i++) {
+            const e = entries[i]
+            const nameBytes = encodedNames[i]
             packU64(resp, off, e.inode_id)
             resp[off + 8] = e.dt_type
             packU16(resp, off + 9, nameBytes.length)
@@ -455,11 +462,7 @@ export class VirtioV86FS {
         this.bus.send('virtio-v86fs-open', inode_id)
 
         // OPEN_R: [7B hdr] [4B status] [8B handle_id]
-        const resp = new Uint8Array(19)
-        packU32(resp, 0, 19)
-        resp[4] = V86FS_MSG_OPEN_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(19, V86FS_MSG_OPEN_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU64(resp, 11, handle_id)
         return resp
@@ -473,11 +476,7 @@ export class VirtioV86FS {
         this.bus.send('virtio-v86fs-close', handle_id)
 
         // CLOSE_R: [7B hdr] [4B status]
-        const resp = new Uint8Array(11)
-        packU32(resp, 0, 11)
-        resp[4] = V86FS_MSG_CLOSE_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(11, V86FS_MSG_CLOSE_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         return resp
     }
@@ -503,11 +502,7 @@ export class VirtioV86FS {
 
         if (!content || offset >= content.length) {
             // EOF or no content
-            const resp = new Uint8Array(15)
-            packU32(resp, 0, 15)
-            resp[4] = V86FS_MSG_READ_R
-            resp[5] = tag & 0xff
-            resp[6] = (tag >> 8) & 0xff
+            const resp = makeResp(15, V86FS_MSG_READ_R, tag)
             packU32(resp, 7, V86FS_STATUS_OK)
             packU32(resp, 11, 0) // 0 bytes read
             return resp
@@ -533,7 +528,7 @@ export class VirtioV86FS {
         // Parse CREATE: [7B hdr] [8B parent_id] [2B name_len] [name...] [4B mode]
         const parent_id = readU64(req, 7)
         const name_len = readU16(req, 15)
-        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+        const name = textDecoder.decode(req.subarray(17, 17 + name_len))
         const mode =
             req[17 + name_len] |
             (req[18 + name_len] << 8) |
@@ -562,11 +557,7 @@ export class VirtioV86FS {
         INODE_MAP.set(inode_id, entry)
 
         // CREATE_R: [7B hdr] [4B status] [8B inode_id] [4B mode]
-        const resp = new Uint8Array(23)
-        packU32(resp, 0, 23)
-        resp[4] = V86FS_MSG_CREATE_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(23, V86FS_MSG_CREATE_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU64(resp, 11, inode_id)
         packU32(resp, 19, entry.mode)
@@ -599,11 +590,7 @@ export class VirtioV86FS {
         }
 
         // WRITE_R: [7B hdr] [4B status] [4B bytes_written]
-        const resp = new Uint8Array(15)
-        packU32(resp, 0, 15)
-        resp[4] = V86FS_MSG_WRITE_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(15, V86FS_MSG_WRITE_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU32(resp, 11, size)
         return resp
@@ -613,7 +600,7 @@ export class VirtioV86FS {
         // Parse MKDIR: [7B hdr] [8B parent_id] [2B name_len] [name...] [4B mode]
         const parent_id = readU64(req, 7)
         const name_len = readU16(req, 15)
-        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+        const name = textDecoder.decode(req.subarray(17, 17 + name_len))
         const mode =
             req[17 + name_len] |
             (req[18 + name_len] << 8) |
@@ -641,11 +628,7 @@ export class VirtioV86FS {
         FS_ENTRIES.set(inode_id, []) // empty dir
 
         // MKDIR_R: [7B hdr] [4B status] [8B inode_id] [4B mode]
-        const resp = new Uint8Array(23)
-        packU32(resp, 0, 23)
-        resp[4] = V86FS_MSG_MKDIR_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(23, V86FS_MSG_MKDIR_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU64(resp, 11, inode_id)
         packU32(resp, 19, entry.mode)
@@ -682,22 +665,14 @@ export class VirtioV86FS {
         }
 
         // SETATTR_R: [7B hdr] [4B status]
-        const resp = new Uint8Array(11)
-        packU32(resp, 0, 11)
-        resp[4] = V86FS_MSG_SETATTR_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(11, V86FS_MSG_SETATTR_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         return resp
     }
 
     handle_fsync(req: Uint8Array, tag: number): Uint8Array {
         // FSYNC is a no-op for the in-memory test FS
-        const resp = new Uint8Array(11)
-        packU32(resp, 0, 11)
-        resp[4] = V86FS_MSG_FSYNC_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(11, V86FS_MSG_FSYNC_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         return resp
     }
@@ -706,7 +681,7 @@ export class VirtioV86FS {
         // Parse UNLINK: [7B hdr] [8B parent_id] [2B name_len] [name...]
         const parent_id = readU64(req, 7)
         const name_len = readU16(req, 15)
-        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+        const name = textDecoder.decode(req.subarray(17, 17 + name_len))
 
         const children = FS_ENTRIES.get(parent_id)
         let status = V86FS_STATUS_ENOENT
@@ -721,11 +696,7 @@ export class VirtioV86FS {
             }
         }
 
-        const resp = new Uint8Array(11)
-        packU32(resp, 0, 11)
-        resp[4] = V86FS_MSG_UNLINK_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(11, V86FS_MSG_UNLINK_R, tag)
         packU32(resp, 7, status)
         return resp
     }
@@ -738,7 +709,7 @@ export class VirtioV86FS {
         off += 8
         const old_name_len = readU16(req, off)
         off += 2
-        const old_name = new TextDecoder().decode(
+        const old_name = textDecoder.decode(
             req.subarray(off, off + old_name_len),
         )
         off += old_name_len
@@ -746,7 +717,7 @@ export class VirtioV86FS {
         off += 8
         const new_name_len = readU16(req, off)
         off += 2
-        const new_name = new TextDecoder().decode(
+        const new_name = textDecoder.decode(
             req.subarray(off, off + new_name_len),
         )
 
@@ -777,11 +748,7 @@ export class VirtioV86FS {
             }
         }
 
-        const resp = new Uint8Array(11)
-        packU32(resp, 0, 11)
-        resp[4] = V86FS_MSG_RENAME_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(11, V86FS_MSG_RENAME_R, tag)
         packU32(resp, 7, status)
         return resp
     }
@@ -794,13 +761,11 @@ export class VirtioV86FS {
         off += 8
         const name_len = readU16(req, off)
         off += 2
-        const name = new TextDecoder().decode(req.subarray(off, off + name_len))
+        const name = textDecoder.decode(req.subarray(off, off + name_len))
         off += name_len
         const target_len = readU16(req, off)
         off += 2
-        const target = new TextDecoder().decode(
-            req.subarray(off, off + target_len),
-        )
+        const target = textDecoder.decode(req.subarray(off, off + target_len))
 
         const inode_id = this.next_inode_id++
         const entry: FsEntry = {
@@ -823,11 +788,7 @@ export class VirtioV86FS {
         INODE_MAP.set(inode_id, entry)
 
         // SYMLINK_R: [7B hdr] [4B status] [8B inode_id] [4B mode]
-        const resp = new Uint8Array(23)
-        packU32(resp, 0, 23)
-        resp[4] = V86FS_MSG_SYMLINK_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(23, V86FS_MSG_SYMLINK_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU64(resp, 11, inode_id)
         packU32(resp, 19, entry.mode)
@@ -840,22 +801,14 @@ export class VirtioV86FS {
         const entry = INODE_MAP.get(inode_id)
 
         if (!entry || !entry.symlink_target) {
-            const resp = new Uint8Array(11)
-            packU32(resp, 0, 11)
-            resp[4] = V86FS_MSG_READLINK_R
-            resp[5] = tag & 0xff
-            resp[6] = (tag >> 8) & 0xff
+            const resp = makeResp(11, V86FS_MSG_READLINK_R, tag)
             packU32(resp, 7, V86FS_STATUS_ENOENT)
             return resp
         }
 
-        const target_bytes = new TextEncoder().encode(entry.symlink_target)
+        const target_bytes = textEncoder.encode(entry.symlink_target)
         const resp_len = 11 + 2 + target_bytes.length
-        const resp = new Uint8Array(resp_len)
-        packU32(resp, 0, resp_len)
-        resp[4] = V86FS_MSG_READLINK_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(resp_len, V86FS_MSG_READLINK_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU16(resp, 11, target_bytes.length)
         resp.set(target_bytes, 13)
@@ -865,11 +818,7 @@ export class VirtioV86FS {
     handle_statfs(tag: number): Uint8Array {
         // STATFS_R: [7B hdr] [4B status] [8B blocks] [8B bfree] [8B bavail]
         //           [8B files] [8B ffree] [4B bsize] [4B namelen]
-        const resp = new Uint8Array(55)
-        packU32(resp, 0, 55)
-        resp[4] = V86FS_MSG_STATFS_R
-        resp[5] = tag & 0xff
-        resp[6] = (tag >> 8) & 0xff
+        const resp = makeResp(55, V86FS_MSG_STATFS_R, tag)
         packU32(resp, 7, V86FS_STATUS_OK)
         packU64(resp, 11, 1024 * 1024) // blocks
         packU64(resp, 19, 512 * 1024) // bfree
