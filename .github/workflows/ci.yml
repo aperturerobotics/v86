@@ -5,35 +5,154 @@ on:
   pull_request:
 
 jobs:
-  eslint:
-    name: eslint
+  lint:
+    name: Lint & typecheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run lint
+      - run: bun run typecheck
 
-      - name: Run eslint
-        run: sudo npm install -g eslint; make eslint
+  kernel:
+    name: Build v86fs kernel
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      linux-sha: ${{ steps.linux-sha.outputs.sha }}
+    steps:
+      - name: Get Linux v86 branch HEAD
+        id: linux-sha
+        run: |
+          SHA=$(gh api repos/aperturerobotics/linux/commits/v86 --jq '.sha')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Linux v86 HEAD: $SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check kernel cache
+        uses: actions/cache@v5
+        id: kernel-cache
+        with:
+          path: skiffos/workspaces/v86min/images/bzImage
+          key: v86fs-kernel-${{ steps.linux-sha.outputs.sha }}
+
+      - name: Restore buildroot cache
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ~/br-cache
+          key: buildroot-r1-${{ runner.os }}
+
+      - name: Clone SkiffOS
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch v86 https://github.com/skiffos/SkiffOS.git skiffos
+
+      - name: Configure kernel tarball override
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p skiffos/overrides/buildroot
+          cat > skiffos/overrides/buildroot/kernel <<'EOF'
+          BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+          # BR2_LINUX_KERNEL_CUSTOM_VERSION is not set
+          BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/aperturerobotics/linux/archive/${{ steps.linux-sha.outputs.sha }}.tar.gz"
+          EOF
+
+      - name: Install buildroot dependencies
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential gcc g++ unzip bc cpio rsync \
+            wget libncurses-dev file python3 python3-pip
+
+      - name: Build kernel via SkiffOS
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        working-directory: skiffos
+        run: |
+          export SKIFF_CONFIG=browser/v86min
+          export SKIFF_WORKSPACE=v86min
+          export BR2_CCACHE_DIR=${HOME}/br-cache/ccache
+          export BR2_DL_DIR=${HOME}/br-cache/dl
+          make configure
+          make br/linux
+
+      - name: Upload bzImage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: v86fs-kernel
+          path: skiffos/workspaces/v86min/images/bzImage
+
+  rootfs:
+    name: Build v86fs rootfs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: tools
+
+      - name: Check rootfs cache
+        uses: actions/cache@v5
+        id: rootfs-cache
+        with:
+          path: v86fs-rootfs/
+          key: v86fs-rootfs-v2
+
+      - name: Install debootstrap
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update -y && sudo apt-get install -y debootstrap
+
+      - name: Create minimal i386 rootfs
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo debootstrap --arch=i386 --variant=minbase \
+            --include=bash,coreutils,mount,util-linux,procps,sed,grep,gawk,diffutils \
+            bookworm rootfs http://deb.debian.org/debian
+          # Cleanup to reduce size
+          sudo rm -rf rootfs/var/cache/apt/archives/* rootfs/usr/share/doc rootfs/usr/share/man
+          # List entries without ./ prefix so fs2json.py places them at root level
+          # (tar -C rootfs . creates ./dev, ./usr etc. which fs2json nests under '.')
+          sudo bash -c 'cd rootfs && tar cf ../rootfs.tar *'
+
+      - name: Generate fs.json and flat/
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p v86fs-rootfs/flat
+          python3 tools/fs2json.py --out v86fs-rootfs/fs.json rootfs.tar
+          python3 tools/copy-to-sha256.py rootfs.tar v86fs-rootfs/flat
+          rm rootfs.tar
+
+      - name: Upload rootfs artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: v86fs-rootfs
+          path: v86fs-rootfs/
+          compression-level: 6
 
   test:
     runs-on: ubuntu-latest
     name: Build and test
+    needs: [kernel, rootfs]
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           filter: tree:0
 
+      - uses: oven-sh/setup-bun@v2
+
       - name: Setup Node.js version
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           check-latest: true
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup toolchain
+      - name: Setup Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
           rustup target add wasm32-unknown-unknown
@@ -44,20 +163,43 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install nasm gdb qemu-system-x86 libc6-dev-i386 -y
 
-      - name: Build all-debug
-        run: make all-debug
+      - name: Install dependencies
+        run: bun install
 
-      - name: Build all
-        run: make all
+      - name: Build TypeScript
+        run: bun run build
 
-      - name: Build fallback
+      - name: Build WASM (debug)
+        run: make build/v86-debug.wasm
+
+      - name: Build WASM (release)
+        run: make build/v86.wasm
+
+      - name: Build WASM (fallback)
         run: make build/v86-fallback.wasm
 
       - name: rustfmt check
         run: make rustfmt
 
+      - name: Download v86fs kernel
+        uses: actions/download-artifact@v8
+        with:
+          name: v86fs-kernel
+          path: build/v86fs-assets
+
+      - name: Download v86fs rootfs
+        uses: actions/download-artifact@v8
+        with:
+          name: v86fs-rootfs
+          path: build/v86fs-assets
+
+      - name: Run vitest
+        run: bun run test
+        env:
+          V86FS_DIR: build/v86fs-assets
+
       - name: Fetch kvm-unit-test cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-kvm-unit-test
         with:
           path: tests/kvm-unit-tests/
@@ -68,26 +210,32 @@ jobs:
         run: (cd tests/kvm-unit-tests && ./configure && make x86/realmode.flat)
 
       - name: Run kvm-unit-test
-        run: tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
+        run: bun tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
 
-      - name: Fetch namsmtests cache
-        uses: actions/cache@v4
+      - name: Fetch nasmtests cache
+        uses: actions/cache@v5
         id: cache-nasmtests
         with:
           path: tests/nasm/build/
           key: ${{ runner.os }}-nasmtests
 
       - name: Run nasmtests
-        run: MAX_PARALLEL_TESTS=1 make nasmtests
+        run: |
+          bun tests/nasm/create_tests.ts
+          bun tests/nasm/gen_fixtures.ts
+          MAX_PARALLEL_TESTS=1 bun tests/nasm/run.ts
 
       - name: Run nasmtests-force-jit
-        run: MAX_PARALLEL_TESTS=1 make nasmtests-force-jit
+        run: |
+          bun tests/nasm/create_tests.ts
+          bun tests/nasm/gen_fixtures.ts
+          FORCE_JIT=1 MAX_PARALLEL_TESTS=1 bun tests/nasm/run.ts
 
       - name: Run rust-test
         run: make rust-test
 
       - name: Fetch image cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-images
         with:
           path: images/
@@ -98,50 +246,67 @@ jobs:
         run: mkdir -p images && curl --compressed --output-dir images --remote-name-all https://i.copy.sh/{linux.iso,linux3.iso,linux4.iso,buildroot-bzimage68.bin,TinyCore-11.0.iso,oberon.img,msdos.img,openbsd-floppy.img,kolibri.img,windows101.img,os8.img,freedos722.img,mobius-fd-release5.img,msdos622.img}
 
       - name: Run api-tests
-        run: make api-tests
+        run: |
+          bun tests/api/clean-shutdown.ts
+          bun tests/api/state.ts
+          bun tests/api/reset.ts
+          bun tests/api/floppy.ts
+          bun tests/api/cdrom-insert-eject.ts
+          bun tests/api/reboot.ts
+          bun tests/api/serial.ts
+          bun tests/api/pic.ts
+          bun tests/api/2g-mem.ts
 
       - name: Run qemutests
-        run: make qemutests
-
-      - name: Run qemutests-release
-        run: make qemutests-release
+        run: |
+          make -C tests/qemu test-i386
+          LOG_LEVEL=3 bun tests/qemu/run.ts build/qemu-test-result
+          bun tests/qemu/run-qemu.ts > build/qemu-test-reference
+          diff build/qemu-test-result build/qemu-test-reference
 
       - name: Run jitpagingtests
-        run: make jitpagingtests
+        run: |
+          make -C tests/jit-paging test-jit
+          bun tests/jit-paging/run.ts
+
+      - name: Build integration test filesystem
+        run: make build/integration-test-fs/fs.json
 
       - name: Run integration tests
-        run: MAX_PARALLEL_TESTS=1 make tests
+        run: MAX_PARALLEL_TESTS=1 LOG_LEVEL=3 bun tests/full/run.ts
 
       - name: Run devices tests
-        run: make devices-test
+        run: |
+          bun tests/devices/virtio_9p.ts
+          bun tests/devices/virtio_console.ts
+          bun tests/devices/fetch_network.ts
+          USE_VIRTIO=1 bun tests/devices/fetch_network.ts
+          bun tests/devices/wisp_network.ts
 
       - name: Run expect tests
-        run: make expect-tests
-
-      - name: Update package.json version
-        run: make update-package-json-version
+        run: |
+          make build/libwabt.cjs
+          make -C tests/expect/tests
+          bun tests/expect/run.ts
 
       - name: Upload the artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: v86
           path: |
             package.json
             LICENSE
             Readme.md
-            build/libv86*.js
-            build/libv86*.js.map
+            dist/
             build/v86*.wasm
-            build/*.mjs
 
   upload:
-    name: Upload release
+    name: Upload release artifacts
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/master'
 
     permissions:
-      id-token: write
       contents: write
 
     steps:
@@ -153,17 +318,12 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: v86
 
       - name: Display structure of downloaded files
         run: ls -R
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Release to GitHub
         uses: ncipollo/release-action@v1
@@ -172,9 +332,5 @@ jobs:
           tag: latest
           commit: master
           body: ${{ github.event.head_commit.message }}
-          artifacts: "build/libv86*.js,build/libv86*.js.map,build/*.mjs,build/v86*.wasm"
+          artifacts: "dist/*,build/v86*.wasm"
           prerelease: true
-
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
