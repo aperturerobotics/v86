@@ -1,4 +1,4 @@
-FROM ubuntu:21.04
+FROM ubuntu:24.04
 
 RUN \
         export DEBIAN_FRONTEND=noninteractive && \

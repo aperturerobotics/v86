@@ -9,7 +9,7 @@ jobs:
     name: Lint & typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run lint
@@ -32,7 +32,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Check kernel cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: kernel-cache
         with:
           path: skiffos/workspaces/v86min/images/bzImage
@@ -69,7 +69,7 @@ jobs:
           make br/linux
 
       - name: Upload bzImage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: v86fs-kernel
           path: skiffos/workspaces/v86min/images/bzImage
@@ -80,12 +80,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: tools
 
       - name: Check rootfs cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: rootfs-cache
         with:
           path: v86fs-rootfs/
@@ -114,7 +114,7 @@ jobs:
           rm rootfs.tar
 
       - name: Upload rootfs artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: v86fs-rootfs
           path: v86fs-rootfs/
@@ -127,7 +127,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           filter: tree:0
@@ -135,9 +135,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: Setup Node.js version
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           check-latest: true
           registry-url: 'https://registry.npmjs.org'
 
@@ -171,13 +171,13 @@ jobs:
         run: make rustfmt
 
       - name: Download v86fs kernel
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: v86fs-kernel
           path: build/v86fs-assets
 
       - name: Download v86fs rootfs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: v86fs-rootfs
           path: build/v86fs-assets
@@ -188,7 +188,7 @@ jobs:
           V86FS_DIR: build/v86fs-assets
 
       - name: Fetch kvm-unit-test cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-kvm-unit-test
         with:
           path: tests/kvm-unit-tests/
@@ -202,7 +202,7 @@ jobs:
         run: bun tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
 
       - name: Fetch nasmtests cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-nasmtests
         with:
           path: tests/nasm/build/
@@ -224,7 +224,7 @@ jobs:
         run: make rust-test
 
       - name: Fetch image cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-images
         with:
           path: images/
@@ -279,7 +279,7 @@ jobs:
           bun tests/expect/run.ts
 
       - name: Upload the artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: v86
           path: |
@@ -307,7 +307,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: v86
 
