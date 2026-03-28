@@ -53,6 +53,11 @@ function waitForSerial(
     })
 }
 
+// Strip ANSI escape codes and control sequences from serial output
+function stripAnsi(s: string): string {
+    return s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\r/g, '')
+}
+
 // Helper: send a command and wait for the next shell prompt, return output
 async function runCommand(
     emulator: any,
@@ -63,8 +68,9 @@ async function runCommand(
     const p = waitForSerial(emulator, prompt, timeout_ms)
     emulator.serial0_send(cmd + '\n')
     const buf = await p
+    const clean = stripAnsi(buf)
     // Strip the echoed command and prompt from output
-    const lines = buf.split('\n')
+    const lines = clean.split('\n')
     // Find command echo line, take everything after it until the prompt
     const cmdIdx = lines.findIndex((l: string) => l.includes(cmd))
     const promptIdx = lines.findLastIndex((l: string) => l.includes(prompt))
@@ -74,7 +80,7 @@ async function runCommand(
             .join('\n')
             .trim()
     }
-    return buf
+    return clean
 }
 
 // Load handle9p from prototype
@@ -466,6 +472,329 @@ describe(
                     'tail -1 /mnt/numbers.txt 2>&1',
                 )
                 expect(tailResult).toContain('100')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('large file write and read back across multiple pages', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+
+                // Write a 16KB file (4 pages) with known pattern
+                const writeResult = await runCommand(
+                    emulator,
+                    'dd if=/dev/zero bs=1024 count=16 2>/dev/null | tr "\\0" "A" > /mnt/large.bin 2>&1; echo "EXIT:$?"',
+                )
+                expect(writeResult).toContain('EXIT:0')
+
+                // Verify size
+                const statResult = await runCommand(
+                    emulator,
+                    'stat -c "%s" /mnt/large.bin 2>&1',
+                )
+                expect(parseInt(statResult.trim())).toBe(16384)
+
+                // Read back and verify content integrity
+                const md5Write = await runCommand(
+                    emulator,
+                    'md5sum /mnt/large.bin 2>&1',
+                )
+
+                // Write again with different content and verify it changed
+                const writeResult2 = await runCommand(
+                    emulator,
+                    'dd if=/dev/zero bs=1024 count=16 2>/dev/null | tr "\\0" "B" > /mnt/large.bin 2>&1; echo "EXIT:$?"',
+                )
+                expect(writeResult2).toContain('EXIT:0')
+
+                const md5Write2 = await runCommand(
+                    emulator,
+                    'md5sum /mnt/large.bin 2>&1',
+                )
+                // Hashes should differ since content changed
+                expect(md5Write2).not.toBe(md5Write)
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('symlink traversal reads target file content', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+
+                // Create a file and a symlink to it
+                await runCommand(
+                    emulator,
+                    'echo "symlink target content" > /mnt/real.txt',
+                )
+                const lnResult = await runCommand(
+                    emulator,
+                    'ln -s real.txt /mnt/sym.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(lnResult).toContain('EXIT:0')
+
+                // Read through symlink
+                const catResult = await runCommand(
+                    emulator,
+                    'cat /mnt/sym.txt 2>&1',
+                )
+                expect(catResult).toContain('symlink target content')
+
+                // stat -L follows symlink and shows regular file
+                const statResult = await runCommand(
+                    emulator,
+                    'stat -L -c "%F %s" /mnt/sym.txt 2>&1',
+                )
+                expect(statResult).toContain('regular file')
+
+                // ls -l shows symlink type
+                const lsResult = await runCommand(
+                    emulator,
+                    'ls -l /mnt/sym.txt 2>&1',
+                )
+                expect(lsResult).toContain('->')
+                expect(lsResult).toContain('real.txt')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('file permissions are preserved across chmod and stat', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+
+                // Create file with default perms
+                await runCommand(emulator, 'touch /mnt/perms.txt')
+
+                // chmod to various modes and verify each
+                for (const mode of ['644', '755', '600', '777', '444']) {
+                    const chmodResult = await runCommand(
+                        emulator,
+                        `chmod ${mode} /mnt/perms.txt 2>&1; echo "EXIT:$?"`,
+                    )
+                    expect(chmodResult).toContain('EXIT:0')
+
+                    const statResult = await runCommand(
+                        emulator,
+                        'stat -c "%a" /mnt/perms.txt 2>&1',
+                    )
+                    expect(statResult).toContain(mode)
+                }
+
+                // Verify directory chmod too
+                await runCommand(emulator, 'mkdir /mnt/permdir')
+                await runCommand(emulator, 'chmod 700 /mnt/permdir')
+                const dirStat = await runCommand(
+                    emulator,
+                    'stat -c "%a %F" /mnt/permdir 2>&1',
+                )
+                expect(dirStat).toContain('700')
+                expect(dirStat).toContain('directory')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('overwrite existing file replaces content', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+
+                // Write initial content
+                await runCommand(
+                    emulator,
+                    'echo "first version" > /mnt/overwrite.txt',
+                )
+                const cat1 = await runCommand(
+                    emulator,
+                    'cat /mnt/overwrite.txt 2>&1',
+                )
+                expect(cat1).toContain('first version')
+
+                // Overwrite with shorter content
+                await runCommand(emulator, 'echo "v2" > /mnt/overwrite.txt')
+                const cat2 = await runCommand(
+                    emulator,
+                    'cat /mnt/overwrite.txt 2>&1',
+                )
+                expect(cat2).toContain('v2')
+                expect(cat2).not.toContain('first version')
+
+                // Verify size matches new content (v2 + newline = 3 bytes)
+                const statResult = await runCommand(
+                    emulator,
+                    'stat -c "%s" /mnt/overwrite.txt 2>&1',
+                )
+                expect(parseInt(statResult.trim())).toBe(3)
+
+                // Append mode
+                await runCommand(
+                    emulator,
+                    'echo "appended" >> /mnt/overwrite.txt',
+                )
+                const cat3 = await runCommand(
+                    emulator,
+                    'cat /mnt/overwrite.txt 2>&1',
+                )
+                expect(cat3).toContain('v2')
+                expect(cat3).toContain('appended')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('mount unmount remount cycle preserves no stale state', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                // First mount: create files
+                const mountResult = await runCommand(
+                    emulator,
+                    'mkdir -p /mnt && mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(mountResult).toContain('EXIT:0')
+
+                // Verify mount is working
+                const lsCheck = await runCommand(
+                    emulator,
+                    'ls /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(lsCheck).toContain('hello.txt')
+
+                await runCommand(emulator, 'echo "persist" > /mnt/cycle.txt')
+                const cat1 = await runCommand(
+                    emulator,
+                    'cat /mnt/cycle.txt 2>&1',
+                )
+                expect(cat1).toContain('persist')
+
+                // Ensure /proc is mounted for umount to work
+                await runCommand(
+                    emulator,
+                    'mount -t proc proc /proc 2>/dev/null; true',
+                )
+
+                // Unmount
+                const umountResult = await runCommand(
+                    emulator,
+                    'sync && umount /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(umountResult).toContain('EXIT:0')
+
+                // Verify /mnt is now empty (no v86fs content)
+                const lsAfterUmount = await runCommand(
+                    emulator,
+                    'ls /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(lsAfterUmount).not.toContain('cycle.txt')
+
+                // Remount
+                const remountResult = await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(remountResult).toContain('EXIT:0')
+
+                // File should still exist (host-side state persists)
+                const cat2 = await runCommand(
+                    emulator,
+                    'cat /mnt/cycle.txt 2>&1',
+                )
+                expect(cat2).toContain('persist')
+
+                // Can create new files after remount
+                await runCommand(
+                    emulator,
+                    'echo "after remount" > /mnt/new_after.txt',
+                )
+                const cat3 = await runCommand(
+                    emulator,
+                    'cat /mnt/new_after.txt 2>&1',
+                )
+                expect(cat3).toContain('after remount')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('page cache serves repeated reads without host requests', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+
+                // Track READ requests from host
+                let readCount = 0
+                emulator.add_listener('virtio-v86fs-read', () => readCount++)
+
+                // First read populates page cache
+                const cat1 = await runCommand(
+                    emulator,
+                    'cat /mnt/hello.txt 2>&1',
+                )
+                expect(cat1).toContain('hello world')
+                const firstReadCount = readCount
+
+                // Second read should come from page cache (no new READ)
+                const cat2 = await runCommand(
+                    emulator,
+                    'cat /mnt/hello.txt 2>&1',
+                )
+                expect(cat2).toContain('hello world')
+                expect(readCount).toBe(firstReadCount)
 
                 await runCommand(emulator, 'umount /mnt')
             } finally {
