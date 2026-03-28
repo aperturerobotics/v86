@@ -69,6 +69,7 @@ import { VirtioNet } from './virtio_net.js'
 import { VGAScreen } from './vga.js'
 import { VirtioBalloon } from './virtio_balloon.js'
 import { VirtioMem } from './virtio_mem.js'
+import { VirtioV86FS } from './virtio_v86fs.js'
 import { Virtio9p, Virtio9pHandler, Virtio9pProxy } from '../lib/9p.js'
 
 import { load_kernel } from './kernel.js'
@@ -132,6 +133,7 @@ interface CPUDevices {
     virtio_net: VirtioNet
     virtio_balloon: VirtioBalloon
     virtio_mem: VirtioMem
+    virtio_v86fs: VirtioV86FS
 }
 
 interface OptionRom {
@@ -813,6 +815,7 @@ export class CPU {
         state[87] = this.fpu_status_word
         state[88] = this.mxcsr
         state[89] = this.devices.virtio_mem
+        state[90] = this.devices.virtio_v86fs
 
         return state
     }
@@ -1035,6 +1038,8 @@ export class CPU {
             this.devices.virtio_balloon.set_state(state[84])
         if (this.devices.virtio_mem && state[89])
             this.devices.virtio_mem.set_state(state[89])
+        if (this.devices.virtio_v86fs && state[90])
+            this.devices.virtio_v86fs.set_state(state[90])
 
         this.fw_value = state[62]
 
@@ -1563,6 +1568,9 @@ export class CPU {
                     mem_cfg.region_size,
                     mem_cfg.block_size,
                 )
+            }
+            if (settings.virtio_v86fs) {
+                this.devices.virtio_v86fs = new VirtioV86FS(this, device_bus)
             }
 
             this.devices.sb16 = new SB16(this, device_bus)

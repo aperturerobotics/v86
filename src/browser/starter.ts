@@ -366,6 +366,7 @@ export class V86 {
         settings.virtio_balloon = options.virtio_balloon
         settings.virtio_mem = options.virtio_mem
         settings.virtio_console = !!options.virtio_console
+        settings.virtio_v86fs = !!options.virtio_v86fs
 
         const relay_url =
             options.network_relay_url ||
