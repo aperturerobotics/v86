@@ -3,7 +3,7 @@
 import { LOG_PCI } from './const.js'
 import { dbg_log } from './log.js'
 import { VirtIO, VIRTIO_F_VERSION_1 } from './virtio.js'
-import * as marshall from '../lib/marshall.js'
+import * as _marshall from '../lib/marshall.js'
 import { BusConnector } from './bus.js'
 
 interface VirtioMemCPU {

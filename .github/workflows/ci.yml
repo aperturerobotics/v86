@@ -15,9 +15,115 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
 
+  kernel:
+    name: Build v86fs kernel
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      linux-sha: ${{ steps.linux-sha.outputs.sha }}
+    steps:
+      - name: Get Linux v86 branch HEAD
+        id: linux-sha
+        run: |
+          SHA=$(gh api repos/aperturerobotics/linux/commits/v86 --jq '.sha')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Linux v86 HEAD: $SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check kernel cache
+        uses: actions/cache@v4
+        id: kernel-cache
+        with:
+          path: skiffos/workspaces/v86min/images/bzImage
+          key: v86fs-kernel-${{ steps.linux-sha.outputs.sha }}
+
+      - name: Clone SkiffOS
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch v86 https://github.com/skiffos/SkiffOS.git skiffos
+
+      - name: Configure kernel tarball override
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p skiffos/overrides/buildroot
+          cat > skiffos/overrides/buildroot/kernel <<'EOF'
+          BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+          # BR2_LINUX_KERNEL_CUSTOM_VERSION is not set
+          BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/aperturerobotics/linux/archive/${{ steps.linux-sha.outputs.sha }}.tar.gz"
+          EOF
+
+      - name: Install buildroot dependencies
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential gcc g++ unzip bc cpio rsync \
+            wget libncurses-dev file python3 python3-pip
+
+      - name: Build kernel via SkiffOS
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        working-directory: skiffos
+        run: |
+          export SKIFF_CONFIG=browser/v86min
+          export SKIFF_WORKSPACE=v86min
+          make configure
+          make br/linux
+
+      - name: Upload bzImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v86fs-kernel
+          path: skiffos/workspaces/v86min/images/bzImage
+
+  rootfs:
+    name: Build v86fs rootfs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools
+
+      - name: Check rootfs cache
+        uses: actions/cache@v4
+        id: rootfs-cache
+        with:
+          path: v86fs-rootfs/
+          key: v86fs-rootfs-v1
+
+      - name: Install debootstrap
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update -y && sudo apt-get install -y debootstrap
+
+      - name: Create minimal i386 rootfs
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo debootstrap --arch=i386 --variant=minbase \
+            --include=bash,coreutils,mount,util-linux,procps,sed,grep,gawk,diffutils \
+            bookworm rootfs http://deb.debian.org/debian
+          # Cleanup to reduce size
+          sudo rm -rf rootfs/var/cache/apt/archives/* rootfs/usr/share/doc rootfs/usr/share/man
+          sudo tar cf rootfs.tar -C rootfs .
+
+      - name: Generate fs.json and flat/
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p v86fs-rootfs/flat
+          python3 tools/fs2json.py --out v86fs-rootfs/fs.json rootfs.tar
+          python3 tools/copy-to-sha256.py rootfs.tar v86fs-rootfs/flat
+          rm rootfs.tar
+
+      - name: Upload rootfs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v86fs-rootfs
+          path: v86fs-rootfs/
+          compression-level: 6
+
   test:
     runs-on: ubuntu-latest
     name: Build and test
+    needs: [kernel, rootfs]
     timeout-minutes: 60
     steps:
       - name: Checkout repository
@@ -64,8 +170,22 @@ jobs:
       - name: rustfmt check
         run: make rustfmt
 
+      - name: Download v86fs kernel
+        uses: actions/download-artifact@v4
+        with:
+          name: v86fs-kernel
+          path: build/v86fs-assets
+
+      - name: Download v86fs rootfs
+        uses: actions/download-artifact@v4
+        with:
+          name: v86fs-rootfs
+          path: build/v86fs-assets
+
       - name: Run vitest
         run: bun run test
+        env:
+          V86FS_DIR: build/v86fs-assets
 
       - name: Fetch kvm-unit-test cache
         uses: actions/cache@v4

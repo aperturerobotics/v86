@@ -4,10 +4,20 @@ import url from 'node:url'
 import fs from 'node:fs'
 
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
-const PROTO_DIR = path.resolve(__dirname, '../../wasivm/prototypes/debian-v86')
 
-const { V86 } = await import('../src/main.js')
-const { INODE_MAP, FS_ENTRIES } = await import('../src/virtio_v86fs.js')
+// V86FS_DIR: directory containing bzImage, fs.json, flat/
+// Set via env var or defaults to the wasivm prototype path for local dev.
+const V86FS_DIR =
+    process.env.V86FS_DIR ??
+    path.resolve(__dirname, '../../wasivm/prototypes/debian-v86')
+const HAS_PROTO = fs.existsSync(path.join(V86FS_DIR, 'bzImage'))
+
+const { V86 } = HAS_PROTO
+    ? await import('../src/main.js')
+    : ({ V86: undefined } as any)
+const { INODE_MAP, FS_ENTRIES } = HAS_PROTO
+    ? await import('../src/virtio_v86fs.js')
+    : ({ INODE_MAP: undefined, FS_ENTRIES: undefined } as any)
 
 // Patch fetch to support file:// URLs and local paths for Node.js
 const _origFetch = globalThis.fetch
@@ -54,8 +64,10 @@ function waitForSerial(
 }
 
 // Strip ANSI escape codes and control sequences from serial output
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;?]*[a-zA-Z]/g
 function stripAnsi(s: string): string {
-    return s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\r/g, '')
+    return s.replace(ANSI_RE, '').replace(/\r/g, '')
 }
 
 // Helper: send a command and wait for the next shell prompt, return output
@@ -83,16 +95,16 @@ async function runCommand(
     return clean
 }
 
-// Load handle9p from prototype
+// Load handle9p from local tests/v86fs/ directory
 async function loadHandle9p(): Promise<any> {
-    const mod = await import(path.join(PROTO_DIR, 'handle9p-server.mjs'))
-    const fsJsonUrl = url.pathToFileURL(path.join(PROTO_DIR, 'fs.json')).href
-    const flatUrl = url.pathToFileURL(path.join(PROTO_DIR, 'flat')).href + '/'
+    const mod = await import(path.join(__dirname, 'v86fs/handle9p-server.mjs'))
+    const fsJsonUrl = url.pathToFileURL(path.join(V86FS_DIR, 'fs.json')).href
+    const flatUrl = url.pathToFileURL(path.join(V86FS_DIR, 'flat')).href + '/'
     return mod.createHandle9p(fsJsonUrl, flatUrl)
 }
 
 function createBootEmulator(handle9p: any): any {
-    const bzImagePath = path.join(PROTO_DIR, 'bzImage')
+    const bzImagePath = path.join(V86FS_DIR, 'bzImage')
     if (!fs.existsSync(bzImagePath)) {
         throw new Error(`bzImage not found at ${bzImagePath}`)
     }
