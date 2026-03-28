@@ -105,7 +105,23 @@ export class V86 {
 
         let cpu: any
 
-        let wasm_memory: any
+        // Reserve VA upfront so memory.grow() is fast (no realloc+copy).
+        // Without maximum, engines must reallocate on every grow which
+        // is expensive and can OOM for large guest memories.
+        const memory_size = options.memory_size || 64 * 1024 * 1024
+        const vga_memory_size = options.vga_memory_size || 8 * 1024 * 1024
+        const memory_max =
+            options.memory_max || (memory_size + vga_memory_size) * 4
+        const WASM_PAGE_SIZE = 65536
+        const wasm_initial_pages = 256
+        const wasm_max_pages = Math.max(
+            wasm_initial_pages,
+            Math.min(Math.ceil(memory_max / WASM_PAGE_SIZE), 65536),
+        )
+        const wasm_memory = new WebAssembly.Memory({
+            initial: wasm_initial_pages,
+            maximum: wasm_max_pages,
+        })
 
         const wasm_table = new WebAssembly.Table({
             element: 'anyfunc',
@@ -113,6 +129,7 @@ export class V86 {
         })
 
         const wasm_shared_funcs: Record<string, any> = {
+            memory: wasm_memory,
             cpu_exception_hook: (n: number) => this.cpu_exception_hook(n),
 
             run_hardware_timers: function (a: any, t: any) {
@@ -280,7 +297,6 @@ export class V86 {
         }
 
         wasm_fn({ env: wasm_shared_funcs }).then((exports: WasmExports) => {
-            wasm_memory = exports.memory
             exports['rust_init']()
 
             const emulator = (this.v86 = new v86(this.emulator_bus, {
@@ -955,6 +971,30 @@ export class V86 {
      */
     async run(): Promise<void> {
         this.v86.run()
+    }
+
+    /**
+     * Grow guest memory to the specified size in bytes. Stops the VM,
+     * grows WASM linear memory, updates memory_size, clears the TLB,
+     * and resumes execution.
+     */
+    async growMemory(newSizeBytes: number): Promise<void> {
+        const cpu = this.v86.cpu
+        if (newSizeBytes <= cpu.memory_size[0]) {
+            return
+        }
+
+        const wasRunning = this.cpu_is_running
+        if (wasRunning) {
+            await this.stop()
+        }
+
+        cpu.resize_memory(newSizeBytes)
+        cpu.full_clear_tlb()
+
+        if (wasRunning) {
+            await this.run()
+        }
     }
 
     /**
