@@ -164,9 +164,9 @@ for (const entries of FS_ENTRIES.values()) {
 // Header size: 4B length + 1B type + 2B tag
 const V86FS_HDR_SIZE = 7
 
-const VIRTIO_V86FS_QUEUE_HIPRIQ = 0
-const VIRTIO_V86FS_QUEUE_REQUESTQ = 1
-const VIRTIO_V86FS_QUEUE_NOTIFYQ = 2
+const _VIRTIO_V86FS_QUEUE_HIPRIQ = 0
+const _VIRTIO_V86FS_QUEUE_REQUESTQ = 1
+const _VIRTIO_V86FS_QUEUE_NOTIFYQ = 2
 
 function packU32(buf: Uint8Array, offset: number, val: number): void {
     buf[offset] = val & 0xff

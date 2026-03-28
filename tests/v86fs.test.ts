@@ -386,6 +386,93 @@ describe(
             }
         })
 
+        it('nested directory operations and cross-dir rename', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+
+                // Create nested directories
+                const mkdirNested = await runCommand(
+                    emulator,
+                    'mkdir -p /mnt/a/b 2>&1; echo "EXIT:$?"',
+                )
+                expect(mkdirNested).toContain('EXIT:0')
+
+                // Write a file inside nested dir
+                const writeNested = await runCommand(
+                    emulator,
+                    'echo nested > /mnt/a/b/file.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(writeNested).toContain('EXIT:0')
+
+                // Read it back
+                const catNested = await runCommand(
+                    emulator,
+                    'cat /mnt/a/b/file.txt 2>&1',
+                )
+                expect(catNested).toContain('nested')
+
+                // Rename across directories
+                const mvCross = await runCommand(
+                    emulator,
+                    'mv /mnt/a/b/file.txt /mnt/a/moved.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(mvCross).toContain('EXIT:0')
+
+                // Verify moved
+                const lsA = await runCommand(emulator, 'ls /mnt/a 2>&1')
+                expect(lsA).toContain('moved.txt')
+                const lsB = await runCommand(emulator, 'ls /mnt/a/b 2>&1')
+                expect(lsB).not.toContain('file.txt')
+
+                // rmdir on empty dir
+                const rmdirResult = await runCommand(
+                    emulator,
+                    'rmdir /mnt/a/b 2>&1; echo "EXIT:$?"',
+                )
+                expect(rmdirResult).toContain('EXIT:0')
+
+                // Write larger content and read back
+                const writeLarge = await runCommand(
+                    emulator,
+                    'seq 1 100 > /mnt/numbers.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(writeLarge).toContain('EXIT:0')
+
+                const wcResult = await runCommand(
+                    emulator,
+                    'wc -l /mnt/numbers.txt 2>&1',
+                )
+                expect(wcResult).toContain('100')
+
+                // Verify content integrity
+                const headResult = await runCommand(
+                    emulator,
+                    'head -3 /mnt/numbers.txt 2>&1',
+                )
+                expect(headResult).toContain('1')
+                expect(headResult).toContain('2')
+                expect(headResult).toContain('3')
+
+                const tailResult = await runCommand(
+                    emulator,
+                    'tail -1 /mnt/numbers.txt 2>&1',
+                )
+                expect(tailResult).toContain('100')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
+
         it('sends MOUNT message with root name to host', async () => {
             const handle9p = await loadHandle9p()
             const emulator = createBootEmulator(handle9p)
