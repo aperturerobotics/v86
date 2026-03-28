@@ -197,6 +197,15 @@ function makeResp(size: number, type: number, tag: number): Uint8Array {
     return resp
 }
 
+function readU32(buf: Uint8Array, offset: number): number {
+    return (
+        buf[offset] |
+        (buf[offset + 1] << 8) |
+        (buf[offset + 2] << 16) |
+        ((buf[offset + 3] << 24) >>> 0)
+    )
+}
+
 function readU16(buf: Uint8Array, offset: number): number {
     return buf[offset] | (buf[offset + 1] << 8)
 }
@@ -485,8 +494,7 @@ export class VirtioV86FS {
         // Parse READ: [7B hdr] [8B handle_id] [8B offset] [4B size]
         const handle_id = readU64(req, 7)
         const offset = readU64(req, 15)
-        const size =
-            req[23] | (req[24] << 8) | (req[25] << 16) | ((req[26] << 24) >>> 0)
+        const size = readU32(req, 23)
 
         const inode_id = this.open_handles.get(handle_id) ?? handle_id
         const entry = INODE_MAP.get(inode_id)
@@ -529,11 +537,7 @@ export class VirtioV86FS {
         const parent_id = readU64(req, 7)
         const name_len = readU16(req, 15)
         const name = textDecoder.decode(req.subarray(17, 17 + name_len))
-        const mode =
-            req[17 + name_len] |
-            (req[18 + name_len] << 8) |
-            (req[19 + name_len] << 16) |
-            ((req[20 + name_len] << 24) >>> 0)
+        const mode = readU32(req, 17 + name_len)
 
         const inode_id = this.next_inode_id++
         const entry: FsEntry = {
@@ -568,8 +572,7 @@ export class VirtioV86FS {
         // Parse WRITE: [7B hdr] [8B inode_id] [8B offset] [4B size] [data...]
         const inode_id = readU64(req, 7)
         const offset = readU64(req, 15)
-        const size =
-            req[23] | (req[24] << 8) | (req[25] << 16) | ((req[26] << 24) >>> 0)
+        const size = readU32(req, 23)
         const data = req.subarray(27, 27 + size)
 
         const entry = INODE_MAP.get(inode_id)
@@ -601,11 +604,7 @@ export class VirtioV86FS {
         const parent_id = readU64(req, 7)
         const name_len = readU16(req, 15)
         const name = textDecoder.decode(req.subarray(17, 17 + name_len))
-        const mode =
-            req[17 + name_len] |
-            (req[18 + name_len] << 8) |
-            (req[19 + name_len] << 16) |
-            ((req[20 + name_len] << 24) >>> 0)
+        const mode = readU32(req, 17 + name_len)
 
         const inode_id = this.next_inode_id++
         const entry: FsEntry = {
@@ -638,19 +637,14 @@ export class VirtioV86FS {
     handle_setattr(req: Uint8Array, tag: number): Uint8Array {
         // Parse SETATTR: [7B hdr] [8B inode_id] [4B valid] [4B mode] [8B size]
         const inode_id = readU64(req, 7)
-        const valid =
-            req[15] | (req[16] << 8) | (req[17] << 16) | ((req[18] << 24) >>> 0)
-        const mode =
-            req[19] | (req[20] << 8) | (req[21] << 16) | ((req[22] << 24) >>> 0)
+        const valid = readU32(req, 15)
+        const mode = readU32(req, 19)
         const size = readU64(req, 23)
 
         const entry = INODE_MAP.get(inode_id)
         if (entry) {
             if (valid & ATTR_MODE) {
-                entry.mode =
-                    (entry.mode & S_IFDIR) |
-                    (entry.mode & S_IFREG) |
-                    (mode & 0o7777)
+                entry.mode = (entry.mode & 0o170000) | (mode & 0o7777)
             }
             if (valid & ATTR_SIZE) {
                 entry.size = size
