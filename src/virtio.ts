@@ -520,18 +520,6 @@ export class VirtIO {
                             )
                         }
 
-                        if (
-                            data &
-                                ~this.device_status &
-                                VIRTIO_STATUS_DRIVER_OK &&
-                            this.device_status &
-                                VIRTIO_STATUS_DEVICE_NEEDS_RESET
-                        ) {
-                            // We couldn't notify NEEDS_RESET earlier because DRIVER_OK was not set.
-                            // Now it has been set, notify now.
-                            this.notify_config_changes()
-                        }
-
                         // Don't set FEATURES_OK if our device doesn't support requested features.
                         if (!this.features_ok) {
                             if (DEBUG && data & VIRTIO_STATUS_FEATURES_OK) {
@@ -540,13 +528,17 @@ export class VirtIO {
                             data &= ~VIRTIO_STATUS_FEATURES_OK
                         }
 
+                        const prev_status = this.device_status
                         this.device_status = data
 
-                        if (
-                            data &
-                            ~this.device_status &
-                            VIRTIO_STATUS_DRIVER_OK
-                        ) {
+                        if (data & ~prev_status & VIRTIO_STATUS_DRIVER_OK) {
+                            if (
+                                prev_status & VIRTIO_STATUS_DEVICE_NEEDS_RESET
+                            ) {
+                                // We couldn't notify NEEDS_RESET earlier because DRIVER_OK was not set.
+                                // Now it has been set, notify now.
+                                this.notify_config_changes()
+                            }
                             options.on_driver_ok()
                         }
                     },
