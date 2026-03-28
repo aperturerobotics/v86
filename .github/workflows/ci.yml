@@ -300,37 +300,3 @@ jobs:
             dist/
             build/v86*.wasm
 
-  upload:
-    name: Upload release artifacts
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/master'
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Delete old release and tag
-        uses: dev-drprasad/delete-tag-and-release@v1.0.1
-        with:
-          delete_release: true
-          tag_name: latest
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: v86
-
-      - name: Display structure of downloaded files
-        run: ls -R
-
-      - name: Release to GitHub
-        uses: ncipollo/release-action@v1
-        with:
-          name: Latest Release
-          tag: latest
-          commit: master
-          body: ${{ github.event.head_commit.message }}
-          artifacts: "dist/*,build/v86*.wasm"
-          prerelease: true
