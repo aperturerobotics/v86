@@ -153,6 +153,20 @@ describe(
                 )
                 expect(statResult).toContain('12 regular')
 
+                // cat should show file content via OPEN + READ + CLOSE
+                let openCount = 0
+                let closeCount = 0
+                emulator.add_listener('virtio-v86fs-open', () => openCount++)
+                emulator.add_listener('virtio-v86fs-close', () => closeCount++)
+
+                const catResult = await runCommand(
+                    emulator,
+                    'cat /mnt/hello.txt 2>&1',
+                )
+                expect(catResult).toContain('hello world')
+                expect(openCount).toBeGreaterThanOrEqual(1)
+                expect(closeCount).toBeGreaterThanOrEqual(1)
+
                 // Unmount
                 await runCommand(emulator, 'umount /mnt')
             } finally {

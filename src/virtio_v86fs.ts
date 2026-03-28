@@ -46,12 +46,18 @@ const V86FS_MSG_MOUNT = 0x00
 const V86FS_MSG_LOOKUP = 0x01
 const V86FS_MSG_GETATTR = 0x02
 const V86FS_MSG_READDIR = 0x03
+const V86FS_MSG_OPEN = 0x04
+const V86FS_MSG_CLOSE = 0x05
+const V86FS_MSG_READ = 0x06
 
 // Response types
 const V86FS_MSG_MOUNT_R = 0x80
 const V86FS_MSG_LOOKUP_R = 0x81
 const V86FS_MSG_GETATTR_R = 0x82
 const V86FS_MSG_READDIR_R = 0x83
+const V86FS_MSG_OPEN_R = 0x84
+const V86FS_MSG_CLOSE_R = 0x85
+const V86FS_MSG_READ_R = 0x86
 const _V86FS_MSG_ERROR_R = 0xff
 
 // Status codes
@@ -74,6 +80,7 @@ interface FsEntry {
     dt_type: number
     mtime_sec: number
     mtime_nsec: number
+    content?: Uint8Array
 }
 
 // Hardcoded test filesystem: root dir (inode 1) with two entries
@@ -89,6 +96,7 @@ const FS_ENTRIES: Map<number, FsEntry[]> = new Map([
                 dt_type: DT_REG,
                 mtime_sec: 1711500000,
                 mtime_nsec: 0,
+                content: new TextEncoder().encode('hello world\n'),
             },
             {
                 inode_id: 3,
@@ -169,9 +177,15 @@ function readU64(buf: Uint8Array, offset: number): number {
 export class VirtioV86FS {
     bus: BusConnector
     virtio: VirtIO
+    next_handle_id: number
+    open_handles: Map<number, number> // handle_id -> inode_id
+    read_count: number
 
     constructor(cpu: VirtioV86FSCPU, bus: BusConnector) {
         this.bus = bus
+        this.next_handle_id = 1
+        this.open_handles = new Map()
+        this.read_count = 0
 
         const queues = [
             // Queue 0: hipriq - high-priority metadata (LOOKUP, GETATTR)
@@ -255,6 +269,12 @@ export class VirtioV86FS {
                 return this.handle_getattr(req, tag)
             case V86FS_MSG_READDIR:
                 return this.handle_readdir(req, tag)
+            case V86FS_MSG_OPEN:
+                return this.handle_open(req, tag)
+            case V86FS_MSG_CLOSE:
+                return this.handle_close(req, tag)
+            case V86FS_MSG_READ:
+                return this.handle_read(req, tag)
             default:
                 console.warn('v86fs: unknown message type:', type)
                 return null
@@ -372,6 +392,89 @@ export class VirtioV86FS {
             off += 11 + nameBytes.length
         }
 
+        return resp
+    }
+
+    handle_open(req: Uint8Array, tag: number): Uint8Array {
+        // Parse OPEN: [7B hdr] [8B inode_id] [4B flags]
+        const inode_id = readU64(req, 7)
+        const handle_id = this.next_handle_id++
+        this.open_handles.set(handle_id, inode_id)
+
+        this.bus.send('virtio-v86fs-open', inode_id)
+
+        // OPEN_R: [7B hdr] [4B status] [8B handle_id]
+        const resp = new Uint8Array(19)
+        packU32(resp, 0, 19)
+        resp[4] = V86FS_MSG_OPEN_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU64(resp, 11, handle_id)
+        return resp
+    }
+
+    handle_close(req: Uint8Array, tag: number): Uint8Array {
+        // Parse CLOSE: [7B hdr] [8B handle_id]
+        const handle_id = readU64(req, 7)
+        this.open_handles.delete(handle_id)
+
+        this.bus.send('virtio-v86fs-close', handle_id)
+
+        // CLOSE_R: [7B hdr] [4B status]
+        const resp = new Uint8Array(11)
+        packU32(resp, 0, 11)
+        resp[4] = V86FS_MSG_CLOSE_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        return resp
+    }
+
+    handle_read(req: Uint8Array, tag: number): Uint8Array {
+        // Parse READ: [7B hdr] [8B handle_id] [8B offset] [4B size]
+        const handle_id = readU64(req, 7)
+        const offset = readU64(req, 15)
+        const size =
+            req[23] | (req[24] << 8) | (req[25] << 16) | ((req[26] << 24) >>> 0)
+
+        const inode_id = this.open_handles.get(handle_id) ?? handle_id
+        const entry = INODE_MAP.get(inode_id)
+        const content = entry?.content
+
+        this.read_count++
+        this.bus.send('virtio-v86fs-read', {
+            handle_id,
+            inode_id,
+            offset,
+            size,
+        })
+
+        if (!content || offset >= content.length) {
+            // EOF or no content
+            const resp = new Uint8Array(15)
+            packU32(resp, 0, 15)
+            resp[4] = V86FS_MSG_READ_R
+            resp[5] = tag & 0xff
+            resp[6] = (tag >> 8) & 0xff
+            packU32(resp, 7, V86FS_STATUS_OK)
+            packU32(resp, 11, 0) // 0 bytes read
+            return resp
+        }
+
+        const start = Math.min(offset, content.length)
+        const end = Math.min(start + size, content.length)
+        const data = content.subarray(start, end)
+
+        // READ_R: [7B hdr] [4B status] [4B bytes_read] [data...]
+        const resp = new Uint8Array(15 + data.length)
+        packU32(resp, 0, 15 + data.length)
+        resp[4] = V86FS_MSG_READ_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU32(resp, 11, data.length)
+        resp.set(data, 15)
         return resp
     }
 
