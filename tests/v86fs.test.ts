@@ -151,6 +151,38 @@ describe(
                 await emulator.destroy()
             }
         })
+
+        it('sends MOUNT message with root name to host', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            let mountName: string | undefined
+            emulator.add_listener('virtio-v86fs-mount', (name: string) => {
+                mountName = name
+            })
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                // Mount with -o root=workspace
+                const result = await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt -o root=workspace 2>&1; echo "EXIT:$?"',
+                )
+                expect(result).toContain('EXIT:0')
+
+                // Verify host received the mount name
+                expect(mountName).toBe('workspace')
+
+                // ls should still work (empty dir from hardcoded root)
+                const lsResult = await runCommand(emulator, 'ls -la /mnt 2>&1')
+                expect(lsResult).toContain('total')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                await emulator.destroy()
+            }
+        })
     },
     { timeout: 180_000 },
 )
