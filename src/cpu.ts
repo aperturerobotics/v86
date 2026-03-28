@@ -726,7 +726,7 @@ export class CPU {
         state[26] = this.flags[0]
         state[27] = this.flags_changed[0]
         state[28] = this.last_op1[0]
-
+        state[29] = this.last_result[0]
         state[30] = this.last_op_size[0]
 
         state[37] = this.instruction_pointer[0]
@@ -945,7 +945,7 @@ export class CPU {
         this.flags[0] = state[26]
         this.flags_changed[0] = state[27]
         this.last_op1[0] = state[28]
-
+        if (state[29] !== undefined) this.last_result[0] = state[29]
         this.last_op_size[0] = state[30]
 
         this.instruction_pointer[0] = state[37]
