@@ -59,6 +59,8 @@ const V86FS_MSG_RENAME = 0x0d
 const V86FS_MSG_SYMLINK = 0x0e
 const V86FS_MSG_READLINK = 0x0f
 const V86FS_MSG_STATFS = 0x10
+const V86FS_MSG_INVALIDATE = 0x20
+const V86FS_MSG_INVALIDATE_DIR = 0x21
 
 // Response types
 const V86FS_MSG_MOUNT_R = 0x80
@@ -111,7 +113,7 @@ interface FsEntry {
 }
 
 // Hardcoded test filesystem: root dir (inode 1) with two entries
-const FS_ENTRIES: Map<number, FsEntry[]> = new Map([
+export const FS_ENTRIES: Map<number, FsEntry[]> = new Map([
     [
         1,
         [
@@ -139,7 +141,7 @@ const FS_ENTRIES: Map<number, FsEntry[]> = new Map([
 ])
 
 // Inode lookup map built from FS_ENTRIES (includes root dir)
-const INODE_MAP: Map<number, FsEntry> = new Map([
+export const INODE_MAP: Map<number, FsEntry> = new Map([
     [
         1,
         {
@@ -875,8 +877,45 @@ export class VirtioV86FS {
         packU64(resp, 35, 1024 * 1024) // files
         packU64(resp, 43, 512 * 1024) // ffree
         packU32(resp, 51, 4096) // bsize
-        // namelen not needed, simple_statfs default is fine
         return resp
+    }
+
+    /** Push an INVALIDATE notification to the guest via notifyq.
+     *  Guest kernel will invalidate page cache for the given inode. */
+    invalidate_inode(inode_id: number): boolean {
+        const queue = this.virtio.queues[2] // notifyq
+        if (!queue.has_request()) return false
+
+        const bufchain = queue.pop_request()
+        // INVALIDATE: [7B hdr] [8B inode_id]
+        const msg = new Uint8Array(15)
+        packU32(msg, 0, 15)
+        msg[4] = V86FS_MSG_INVALIDATE
+        packU16(msg, 5, 0)
+        packU64(msg, 7, inode_id)
+        bufchain.set_next_blob(msg)
+        queue.push_reply(bufchain)
+        queue.flush_replies()
+        return true
+    }
+
+    /** Push an INVALIDATE_DIR notification to the guest via notifyq.
+     *  Guest kernel will invalidate dcache for the given directory inode. */
+    invalidate_dir(inode_id: number): boolean {
+        const queue = this.virtio.queues[2] // notifyq
+        if (!queue.has_request()) return false
+
+        const bufchain = queue.pop_request()
+        // INVALIDATE_DIR: [7B hdr] [8B inode_id]
+        const msg = new Uint8Array(15)
+        packU32(msg, 0, 15)
+        msg[4] = V86FS_MSG_INVALIDATE_DIR
+        packU16(msg, 5, 0)
+        packU64(msg, 7, inode_id)
+        bufchain.set_next_blob(msg)
+        queue.push_reply(bufchain)
+        queue.flush_replies()
+        return true
     }
 
     get_state(): any[] {

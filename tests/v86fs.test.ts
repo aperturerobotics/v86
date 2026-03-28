@@ -7,6 +7,7 @@ const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const PROTO_DIR = path.resolve(__dirname, '../../wasivm/prototypes/debian-v86')
 
 const { V86 } = await import('../src/main.js')
+const { INODE_MAP, FS_ENTRIES } = await import('../src/virtio_v86fs.js')
 
 // Patch fetch to support file:// URLs and local paths for Node.js
 const _origFetch = globalThis.fetch
@@ -258,6 +259,129 @@ describe(
                 // Unmount
                 await runCommand(emulator, 'umount /mnt')
             } finally {
+                await emulator.destroy()
+            }
+        })
+
+        it('push invalidation updates cached file content', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                const mountResult = await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(mountResult).toContain('EXIT:0')
+
+                // Read hello.txt to cache it in page cache
+                const cat1 = await runCommand(
+                    emulator,
+                    'cat /mnt/hello.txt 2>&1',
+                )
+                expect(cat1).toContain('hello world')
+
+                // Modify the file content on the host side directly
+                const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+                const helloEntry = INODE_MAP.get(2) // hello.txt inode=2
+                expect(helloEntry).toBeDefined()
+                const newContent = new TextEncoder().encode(
+                    'modified content\n',
+                )
+                helloEntry!.content = newContent
+                helloEntry!.size = newContent.length
+
+                // Send INVALIDATE to evict page cache
+                const sent = v86fs.invalidate_inode(2)
+                expect(sent).toBe(true)
+
+                // Small delay for interrupt processing
+                await new Promise((r) => setTimeout(r, 200))
+
+                // Drop the dentry cache too so the inode re-reads attrs
+                await runCommand(
+                    emulator,
+                    'echo 2 > /proc/sys/vm/drop_caches 2>&1',
+                )
+
+                // Re-read the file - should show new content
+                const cat2 = await runCommand(
+                    emulator,
+                    'cat /mnt/hello.txt 2>&1',
+                )
+                expect(cat2).toContain('modified content')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                // Restore original content for other tests
+                const helloEntry = INODE_MAP.get(2)
+                if (helloEntry) {
+                    const orig = new TextEncoder().encode('hello world\n')
+                    helloEntry.content = orig
+                    helloEntry.size = orig.length
+                }
+                await emulator.destroy()
+            }
+        })
+
+        it('push invalidation updates directory listing', async () => {
+            const handle9p = await loadHandle9p()
+            const emulator = createBootEmulator(handle9p)
+
+            try {
+                await waitForSerial(emulator, ':/#', 120_000)
+
+                const mountResult = await runCommand(
+                    emulator,
+                    'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+                )
+                expect(mountResult).toContain('EXIT:0')
+
+                // ls to populate dcache
+                const ls1 = await runCommand(emulator, 'ls /mnt 2>&1')
+                expect(ls1).toContain('hello.txt')
+                expect(ls1).not.toContain('injected.txt')
+
+                // Host adds a new file entry directly
+                const entry = {
+                    inode_id: 200,
+                    name: 'injected.txt',
+                    mode: 0o100644,
+                    size: 5,
+                    dt_type: 8,
+                    mtime_sec: Math.floor(Date.now() / 1000),
+                    mtime_nsec: 0,
+                    content: new TextEncoder().encode('hello'),
+                }
+                const rootChildren = FS_ENTRIES.get(1)!
+                rootChildren.push(entry)
+                INODE_MAP.set(200, entry)
+
+                // Send INVALIDATE_DIR for root dir (inode 1)
+                const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+                const sent = v86fs.invalidate_dir(1)
+                expect(sent).toBe(true)
+
+                // Small delay for interrupt processing
+                await new Promise((r) => setTimeout(r, 200))
+
+                // ls should now show the new file
+                const ls2 = await runCommand(emulator, 'ls /mnt 2>&1')
+                expect(ls2).toContain('injected.txt')
+
+                await runCommand(emulator, 'umount /mnt')
+            } finally {
+                // Clean up injected entry
+                const rootChildren = FS_ENTRIES.get(1)
+                if (rootChildren) {
+                    const idx = rootChildren.findIndex(
+                        (e) => e.name === 'injected.txt',
+                    )
+                    if (idx >= 0) rootChildren.splice(idx, 1)
+                }
+                INODE_MAP.delete(200)
                 await emulator.destroy()
             }
         })
