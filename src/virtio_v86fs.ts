@@ -45,12 +45,84 @@ interface VirtioV86FSCPU {
 const V86FS_MSG_MOUNT = 0x00
 const V86FS_MSG_LOOKUP = 0x01
 const V86FS_MSG_GETATTR = 0x02
+const V86FS_MSG_READDIR = 0x03
 
 // Response types
 const V86FS_MSG_MOUNT_R = 0x80
-const _V86FS_MSG_LOOKUP_R = 0x81
-const _V86FS_MSG_GETATTR_R = 0x82
+const V86FS_MSG_LOOKUP_R = 0x81
+const V86FS_MSG_GETATTR_R = 0x82
+const V86FS_MSG_READDIR_R = 0x83
 const _V86FS_MSG_ERROR_R = 0xff
+
+// Status codes
+const V86FS_STATUS_OK = 0
+const V86FS_STATUS_ENOENT = 2
+
+// DT_* types (matching Linux dirent.h)
+const DT_DIR = 4
+const DT_REG = 8
+
+// S_IF* mode bits
+const S_IFDIR = 0o040000
+const S_IFREG = 0o100000
+
+interface FsEntry {
+    inode_id: number
+    name: string
+    mode: number
+    size: number
+    dt_type: number
+    mtime_sec: number
+    mtime_nsec: number
+}
+
+// Hardcoded test filesystem: root dir (inode 1) with two entries
+const FS_ENTRIES: Map<number, FsEntry[]> = new Map([
+    [
+        1,
+        [
+            {
+                inode_id: 2,
+                name: 'hello.txt',
+                mode: S_IFREG | 0o644,
+                size: 12,
+                dt_type: DT_REG,
+                mtime_sec: 1711500000,
+                mtime_nsec: 0,
+            },
+            {
+                inode_id: 3,
+                name: 'subdir',
+                mode: S_IFDIR | 0o755,
+                size: 0,
+                dt_type: DT_DIR,
+                mtime_sec: 1711500000,
+                mtime_nsec: 0,
+            },
+        ],
+    ],
+])
+
+// Inode lookup map built from FS_ENTRIES (includes root dir)
+const INODE_MAP: Map<number, FsEntry> = new Map([
+    [
+        1,
+        {
+            inode_id: 1,
+            name: '',
+            mode: S_IFDIR | 0o755,
+            size: 0,
+            dt_type: DT_DIR,
+            mtime_sec: 1711500000,
+            mtime_nsec: 0,
+        },
+    ],
+])
+for (const entries of FS_ENTRIES.values()) {
+    for (const e of entries) {
+        INODE_MAP.set(e.inode_id, e)
+    }
+}
 
 // Header size: 4B length + 1B type + 2B tag
 const V86FS_HDR_SIZE = 7
@@ -71,8 +143,27 @@ function packU64(buf: Uint8Array, offset: number, val: number): void {
     packU32(buf, offset + 4, 0)
 }
 
+function packU16(buf: Uint8Array, offset: number, val: number): void {
+    buf[offset] = val & 0xff
+    buf[offset + 1] = (val >>> 8) & 0xff
+}
+
 function readU16(buf: Uint8Array, offset: number): number {
     return buf[offset] | (buf[offset + 1] << 8)
+}
+
+function readU64(buf: Uint8Array, offset: number): number {
+    return (
+        buf[offset] |
+        (buf[offset + 1] << 8) |
+        (buf[offset + 2] << 16) |
+        (((buf[offset + 3] << 24) >>> 0) +
+            (buf[offset + 4] |
+                (buf[offset + 5] << 8) |
+                (buf[offset + 6] << 16) |
+                ((buf[offset + 7] << 24) >>> 0)) *
+                0x100000000)
+    )
 }
 
 export class VirtioV86FS {
@@ -159,11 +250,11 @@ export class VirtioV86FS {
             case V86FS_MSG_MOUNT:
                 return this.handle_mount(req, tag)
             case V86FS_MSG_LOOKUP:
-                dbg_log('v86fs: LOOKUP (not implemented)', LOG_PCI)
-                return null
+                return this.handle_lookup(req, tag)
             case V86FS_MSG_GETATTR:
-                dbg_log('v86fs: GETATTR (not implemented)', LOG_PCI)
-                return null
+                return this.handle_getattr(req, tag)
+            case V86FS_MSG_READDIR:
+                return this.handle_readdir(req, tag)
             default:
                 console.warn('v86fs: unknown message type:', type)
                 return null
@@ -193,6 +284,93 @@ export class VirtioV86FS {
         packU32(resp, 7, 0) // status = 0 (success)
         packU64(resp, 11, 1) // root_inode_id = 1
         packU32(resp, 19, 0x41ed) // mode = S_IFDIR | 0755
+
+        return resp
+    }
+
+    handle_getattr(req: Uint8Array, tag: number): Uint8Array {
+        // Parse GETATTR: [7B hdr] [8B inode_id]
+        const inode_id = readU64(req, 7)
+        const entry = INODE_MAP.get(inode_id)
+
+        // GETATTR_R: [7B hdr] [4B status] [4B mode] [8B size] [8B mtime_sec] [4B mtime_nsec]
+        const resp = new Uint8Array(35)
+        packU32(resp, 0, 35)
+        resp[4] = V86FS_MSG_GETATTR_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+
+        if (!entry) {
+            packU32(resp, 7, V86FS_STATUS_ENOENT)
+            return resp
+        }
+
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU32(resp, 11, entry.mode)
+        packU64(resp, 15, entry.size)
+        packU64(resp, 23, entry.mtime_sec)
+        packU32(resp, 31, entry.mtime_nsec)
+        return resp
+    }
+
+    handle_lookup(req: Uint8Array, tag: number): Uint8Array {
+        // Parse LOOKUP: [7B hdr] [8B parent_id] [2B name_len] [name...]
+        const parent_id = readU64(req, 7)
+        const name_len = readU16(req, 15)
+        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+
+        const entries = FS_ENTRIES.get(parent_id)
+        const entry = entries?.find((e) => e.name === name)
+
+        // LOOKUP_R: [7B hdr] [4B status] [8B inode_id] [4B mode] [8B size]
+        const resp = new Uint8Array(31)
+        packU32(resp, 0, 31) // length
+        resp[4] = V86FS_MSG_LOOKUP_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+
+        if (!entry) {
+            packU32(resp, 7, V86FS_STATUS_ENOENT)
+            return resp
+        }
+
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU64(resp, 11, entry.inode_id)
+        packU32(resp, 19, entry.mode)
+        packU64(resp, 23, entry.size)
+        return resp
+    }
+
+    handle_readdir(req: Uint8Array, tag: number): Uint8Array {
+        // Parse READDIR: [7B hdr] [8B dir_id]
+        const dir_id = readU64(req, 7)
+        const entries = FS_ENTRIES.get(dir_id) || []
+
+        // Calculate response size
+        // READDIR_R: [7B hdr] [4B status] [4B count] [entries...]
+        // Each entry: [8B inode_id] [1B type] [2B name_len] [name...]
+        let size = 7 + 4 + 4
+        for (const e of entries) {
+            size += 8 + 1 + 2 + new TextEncoder().encode(e.name).length
+        }
+
+        const resp = new Uint8Array(size)
+        packU32(resp, 0, size)
+        resp[4] = V86FS_MSG_READDIR_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU32(resp, 11, entries.length)
+
+        let off = 15
+        for (const e of entries) {
+            const nameBytes = new TextEncoder().encode(e.name)
+            packU64(resp, off, e.inode_id)
+            resp[off + 8] = e.dt_type
+            packU16(resp, off + 9, nameBytes.length)
+            resp.set(nameBytes, off + 11)
+            off += 11 + nameBytes.length
+        }
 
         return resp
     }

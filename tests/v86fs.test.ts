@@ -141,9 +141,17 @@ describe(
                 )
                 expect(mountResult).toContain('EXIT:0')
 
-                // ls /mnt should succeed (empty dir)
-                const lsResult = await runCommand(emulator, 'ls -la /mnt 2>&1')
-                expect(lsResult).toContain('total')
+                // ls /mnt should show hardcoded entries from host
+                const lsResult = await runCommand(emulator, 'ls /mnt 2>&1')
+                expect(lsResult).toContain('hello.txt')
+                expect(lsResult).toContain('subdir')
+
+                // stat should show correct size from GETATTR
+                const statResult = await runCommand(
+                    emulator,
+                    'stat -c "%s %F" /mnt/hello.txt 2>&1',
+                )
+                expect(statResult).toContain('12 regular')
 
                 // Unmount
                 await runCommand(emulator, 'umount /mnt')
