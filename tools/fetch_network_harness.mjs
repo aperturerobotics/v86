@@ -1,5 +1,5 @@
 import dgram from "node:dgram";
-import { V86, FetchNetworkAdapter } from "../nodejs-loader.mjs";
+import { FetchNetworkAdapter } from "../nodejs-loader.mjs";
 
 //  qemu-system-i386 -m 2G -nographic -hda ~/disk.qcow2 -netdev dgram,id=net0,remote.type=inet,remote.host=127.0.0.1,remote.port=6677,local.host=127.0.0.1,local.port=7744,local.type=inet -device e1000,netdev=net0
 
@@ -11,7 +11,7 @@ const bus = {
     send: (name, data) => events[name](data)
 };
 
-const a = new FetchNetworkAdapter(bus);
+const _a = new FetchNetworkAdapter(bus);
 
 server.on("error", (err) => {
   console.error(`server error:\n${err.stack}`);
