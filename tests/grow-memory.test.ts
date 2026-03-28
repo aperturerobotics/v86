@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 
 const { V86 } = await import('../src/main.js')
 
+const MB = 1024 * 1024
+
 describe('growMemory', () => {
     it('grows memory from 64MB to 128MB', async () => {
-        const MB = 1024 * 1024
         const emulator = new V86({
             memory_size: 64 * MB,
             autostart: false,
@@ -23,7 +24,6 @@ describe('growMemory', () => {
     })
 
     it('preserves data after grow', async () => {
-        const MB = 1024 * 1024
         const emulator = new V86({
             memory_size: 64 * MB,
             autostart: false,

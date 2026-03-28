@@ -1,7 +1,12 @@
 declare let DEBUG: boolean
 
 import { v86 } from '../main.js'
-import { LOG_CPU, WASM_TABLE_OFFSET, WASM_TABLE_SIZE } from '../const.js'
+import {
+    LOG_CPU,
+    WASM_PAGE_SIZE,
+    WASM_TABLE_OFFSET,
+    WASM_TABLE_SIZE,
+} from '../const.js'
 import { get_rand_int, load_file, read_sized_string_from_mem } from '../lib.js'
 import { dbg_assert, dbg_trace, dbg_log, set_log_level } from '../log.js'
 import * as print_stats from './print_stats.js'
@@ -112,7 +117,6 @@ export class V86 {
         const vga_memory_size = options.vga_memory_size || 8 * 1024 * 1024
         const memory_max =
             options.memory_max || (memory_size + vga_memory_size) * 4
-        const WASM_PAGE_SIZE = 65536
         const wasm_initial_pages = 256
         const wasm_max_pages = Math.max(
             wasm_initial_pages,
