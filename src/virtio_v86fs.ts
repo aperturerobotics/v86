@@ -49,6 +49,16 @@ const V86FS_MSG_READDIR = 0x03
 const V86FS_MSG_OPEN = 0x04
 const V86FS_MSG_CLOSE = 0x05
 const V86FS_MSG_READ = 0x06
+const V86FS_MSG_CREATE = 0x07
+const V86FS_MSG_WRITE = 0x08
+const V86FS_MSG_MKDIR = 0x09
+const V86FS_MSG_SETATTR = 0x0a
+const V86FS_MSG_FSYNC = 0x0b
+const V86FS_MSG_UNLINK = 0x0c
+const V86FS_MSG_RENAME = 0x0d
+const V86FS_MSG_SYMLINK = 0x0e
+const V86FS_MSG_READLINK = 0x0f
+const V86FS_MSG_STATFS = 0x10
 
 // Response types
 const V86FS_MSG_MOUNT_R = 0x80
@@ -58,7 +68,21 @@ const V86FS_MSG_READDIR_R = 0x83
 const V86FS_MSG_OPEN_R = 0x84
 const V86FS_MSG_CLOSE_R = 0x85
 const V86FS_MSG_READ_R = 0x86
+const V86FS_MSG_CREATE_R = 0x87
+const V86FS_MSG_WRITE_R = 0x88
+const V86FS_MSG_MKDIR_R = 0x89
+const V86FS_MSG_SETATTR_R = 0x8a
+const V86FS_MSG_FSYNC_R = 0x8b
+const V86FS_MSG_UNLINK_R = 0x8c
+const V86FS_MSG_RENAME_R = 0x8d
+const V86FS_MSG_SYMLINK_R = 0x8e
+const V86FS_MSG_READLINK_R = 0x8f
+const V86FS_MSG_STATFS_R = 0x90
 const _V86FS_MSG_ERROR_R = 0xff
+
+// ATTR_* valid mask bits (matching Linux)
+const ATTR_MODE = 1
+const ATTR_SIZE = 8
 
 // Status codes
 const V86FS_STATUS_OK = 0
@@ -67,10 +91,12 @@ const V86FS_STATUS_ENOENT = 2
 // DT_* types (matching Linux dirent.h)
 const DT_DIR = 4
 const DT_REG = 8
+const DT_LNK = 10
 
 // S_IF* mode bits
 const S_IFDIR = 0o040000
 const S_IFREG = 0o100000
+const S_IFLNK = 0o120000
 
 interface FsEntry {
     inode_id: number
@@ -81,6 +107,7 @@ interface FsEntry {
     mtime_sec: number
     mtime_nsec: number
     content?: Uint8Array
+    symlink_target?: string
 }
 
 // Hardcoded test filesystem: root dir (inode 1) with two entries
@@ -178,12 +205,14 @@ export class VirtioV86FS {
     bus: BusConnector
     virtio: VirtIO
     next_handle_id: number
+    next_inode_id: number
     open_handles: Map<number, number> // handle_id -> inode_id
     read_count: number
 
     constructor(cpu: VirtioV86FSCPU, bus: BusConnector) {
         this.bus = bus
         this.next_handle_id = 1
+        this.next_inode_id = 100
         this.open_handles = new Map()
         this.read_count = 0
 
@@ -275,6 +304,26 @@ export class VirtioV86FS {
                 return this.handle_close(req, tag)
             case V86FS_MSG_READ:
                 return this.handle_read(req, tag)
+            case V86FS_MSG_CREATE:
+                return this.handle_create(req, tag)
+            case V86FS_MSG_WRITE:
+                return this.handle_write(req, tag)
+            case V86FS_MSG_MKDIR:
+                return this.handle_mkdir(req, tag)
+            case V86FS_MSG_SETATTR:
+                return this.handle_setattr(req, tag)
+            case V86FS_MSG_FSYNC:
+                return this.handle_fsync(req, tag)
+            case V86FS_MSG_UNLINK:
+                return this.handle_unlink(req, tag)
+            case V86FS_MSG_RENAME:
+                return this.handle_rename(req, tag)
+            case V86FS_MSG_SYMLINK:
+                return this.handle_symlink(req, tag)
+            case V86FS_MSG_READLINK:
+                return this.handle_readlink(req, tag)
+            case V86FS_MSG_STATFS:
+                return this.handle_statfs(tag)
             default:
                 console.warn('v86fs: unknown message type:', type)
                 return null
@@ -475,6 +524,358 @@ export class VirtioV86FS {
         packU32(resp, 7, V86FS_STATUS_OK)
         packU32(resp, 11, data.length)
         resp.set(data, 15)
+        return resp
+    }
+
+    handle_create(req: Uint8Array, tag: number): Uint8Array {
+        // Parse CREATE: [7B hdr] [8B parent_id] [2B name_len] [name...] [4B mode]
+        const parent_id = readU64(req, 7)
+        const name_len = readU16(req, 15)
+        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+        const mode =
+            req[17 + name_len] |
+            (req[18 + name_len] << 8) |
+            (req[19 + name_len] << 16) |
+            ((req[20 + name_len] << 24) >>> 0)
+
+        const inode_id = this.next_inode_id++
+        const entry: FsEntry = {
+            inode_id,
+            name,
+            mode: mode | S_IFREG,
+            size: 0,
+            dt_type: DT_REG,
+            mtime_sec: Math.floor(Date.now() / 1000),
+            mtime_nsec: 0,
+            content: new Uint8Array(0),
+        }
+
+        // Add to parent's entry list
+        let children = FS_ENTRIES.get(parent_id)
+        if (!children) {
+            children = []
+            FS_ENTRIES.set(parent_id, children)
+        }
+        children.push(entry)
+        INODE_MAP.set(inode_id, entry)
+
+        // CREATE_R: [7B hdr] [4B status] [8B inode_id] [4B mode]
+        const resp = new Uint8Array(23)
+        packU32(resp, 0, 23)
+        resp[4] = V86FS_MSG_CREATE_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU64(resp, 11, inode_id)
+        packU32(resp, 19, entry.mode)
+        return resp
+    }
+
+    handle_write(req: Uint8Array, tag: number): Uint8Array {
+        // Parse WRITE: [7B hdr] [8B inode_id] [8B offset] [4B size] [data...]
+        const inode_id = readU64(req, 7)
+        const offset = readU64(req, 15)
+        const size =
+            req[23] | (req[24] << 8) | (req[25] << 16) | ((req[26] << 24) >>> 0)
+        const data = req.subarray(27, 27 + size)
+
+        const entry = INODE_MAP.get(inode_id)
+        if (entry) {
+            // Grow content buffer if needed
+            const needed = offset + size
+            if (!entry.content || entry.content.length < needed) {
+                const newContent = new Uint8Array(needed)
+                if (entry.content) {
+                    newContent.set(entry.content)
+                }
+                entry.content = newContent
+            }
+            entry.content.set(data, offset)
+            if (needed > entry.size) {
+                entry.size = needed
+            }
+        }
+
+        // WRITE_R: [7B hdr] [4B status] [4B bytes_written]
+        const resp = new Uint8Array(15)
+        packU32(resp, 0, 15)
+        resp[4] = V86FS_MSG_WRITE_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU32(resp, 11, size)
+        return resp
+    }
+
+    handle_mkdir(req: Uint8Array, tag: number): Uint8Array {
+        // Parse MKDIR: [7B hdr] [8B parent_id] [2B name_len] [name...] [4B mode]
+        const parent_id = readU64(req, 7)
+        const name_len = readU16(req, 15)
+        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+        const mode =
+            req[17 + name_len] |
+            (req[18 + name_len] << 8) |
+            (req[19 + name_len] << 16) |
+            ((req[20 + name_len] << 24) >>> 0)
+
+        const inode_id = this.next_inode_id++
+        const entry: FsEntry = {
+            inode_id,
+            name,
+            mode: mode | S_IFDIR,
+            size: 0,
+            dt_type: DT_DIR,
+            mtime_sec: Math.floor(Date.now() / 1000),
+            mtime_nsec: 0,
+        }
+
+        let children = FS_ENTRIES.get(parent_id)
+        if (!children) {
+            children = []
+            FS_ENTRIES.set(parent_id, children)
+        }
+        children.push(entry)
+        INODE_MAP.set(inode_id, entry)
+        FS_ENTRIES.set(inode_id, []) // empty dir
+
+        // MKDIR_R: [7B hdr] [4B status] [8B inode_id] [4B mode]
+        const resp = new Uint8Array(23)
+        packU32(resp, 0, 23)
+        resp[4] = V86FS_MSG_MKDIR_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU64(resp, 11, inode_id)
+        packU32(resp, 19, entry.mode)
+        return resp
+    }
+
+    handle_setattr(req: Uint8Array, tag: number): Uint8Array {
+        // Parse SETATTR: [7B hdr] [8B inode_id] [4B valid] [4B mode] [8B size]
+        const inode_id = readU64(req, 7)
+        const valid =
+            req[15] | (req[16] << 8) | (req[17] << 16) | ((req[18] << 24) >>> 0)
+        const mode =
+            req[19] | (req[20] << 8) | (req[21] << 16) | ((req[22] << 24) >>> 0)
+        const size = readU64(req, 23)
+
+        const entry = INODE_MAP.get(inode_id)
+        if (entry) {
+            if (valid & ATTR_MODE) {
+                entry.mode =
+                    (entry.mode & S_IFDIR) |
+                    (entry.mode & S_IFREG) |
+                    (mode & 0o7777)
+            }
+            if (valid & ATTR_SIZE) {
+                entry.size = size
+                if (entry.content) {
+                    if (size === 0) {
+                        entry.content = new Uint8Array(0)
+                    } else if (size < entry.content.length) {
+                        entry.content = entry.content.subarray(0, size)
+                    }
+                }
+            }
+        }
+
+        // SETATTR_R: [7B hdr] [4B status]
+        const resp = new Uint8Array(11)
+        packU32(resp, 0, 11)
+        resp[4] = V86FS_MSG_SETATTR_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        return resp
+    }
+
+    handle_fsync(req: Uint8Array, tag: number): Uint8Array {
+        // FSYNC is a no-op for the in-memory test FS
+        const resp = new Uint8Array(11)
+        packU32(resp, 0, 11)
+        resp[4] = V86FS_MSG_FSYNC_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        return resp
+    }
+
+    handle_unlink(req: Uint8Array, tag: number): Uint8Array {
+        // Parse UNLINK: [7B hdr] [8B parent_id] [2B name_len] [name...]
+        const parent_id = readU64(req, 7)
+        const name_len = readU16(req, 15)
+        const name = new TextDecoder().decode(req.subarray(17, 17 + name_len))
+
+        const children = FS_ENTRIES.get(parent_id)
+        let status = V86FS_STATUS_ENOENT
+        if (children) {
+            const idx = children.findIndex((e) => e.name === name)
+            if (idx >= 0) {
+                const entry = children[idx]
+                INODE_MAP.delete(entry.inode_id)
+                FS_ENTRIES.delete(entry.inode_id)
+                children.splice(idx, 1)
+                status = V86FS_STATUS_OK
+            }
+        }
+
+        const resp = new Uint8Array(11)
+        packU32(resp, 0, 11)
+        resp[4] = V86FS_MSG_UNLINK_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, status)
+        return resp
+    }
+
+    handle_rename(req: Uint8Array, tag: number): Uint8Array {
+        // Parse RENAME: [7B hdr] [8B old_parent_id] [2B old_name_len] [old_name...]
+        //               [8B new_parent_id] [2B new_name_len] [new_name...]
+        let off = 7
+        const old_parent_id = readU64(req, off)
+        off += 8
+        const old_name_len = readU16(req, off)
+        off += 2
+        const old_name = new TextDecoder().decode(
+            req.subarray(off, off + old_name_len),
+        )
+        off += old_name_len
+        const new_parent_id = readU64(req, off)
+        off += 8
+        const new_name_len = readU16(req, off)
+        off += 2
+        const new_name = new TextDecoder().decode(
+            req.subarray(off, off + new_name_len),
+        )
+
+        let status = V86FS_STATUS_ENOENT
+        const old_children = FS_ENTRIES.get(old_parent_id)
+        if (old_children) {
+            const idx = old_children.findIndex((e) => e.name === old_name)
+            if (idx >= 0) {
+                const entry = old_children[idx]
+                old_children.splice(idx, 1)
+                entry.name = new_name
+                let new_children = FS_ENTRIES.get(new_parent_id)
+                if (!new_children) {
+                    new_children = []
+                    FS_ENTRIES.set(new_parent_id, new_children)
+                }
+                // Remove any existing entry with new_name in target dir
+                const existing = new_children.findIndex(
+                    (e) => e.name === new_name,
+                )
+                if (existing >= 0) {
+                    const old_entry = new_children[existing]
+                    INODE_MAP.delete(old_entry.inode_id)
+                    new_children.splice(existing, 1)
+                }
+                new_children.push(entry)
+                status = V86FS_STATUS_OK
+            }
+        }
+
+        const resp = new Uint8Array(11)
+        packU32(resp, 0, 11)
+        resp[4] = V86FS_MSG_RENAME_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, status)
+        return resp
+    }
+
+    handle_symlink(req: Uint8Array, tag: number): Uint8Array {
+        // Parse SYMLINK: [7B hdr] [8B parent_id] [2B name_len] [name...]
+        //                [2B target_len] [target...]
+        let off = 7
+        const parent_id = readU64(req, off)
+        off += 8
+        const name_len = readU16(req, off)
+        off += 2
+        const name = new TextDecoder().decode(req.subarray(off, off + name_len))
+        off += name_len
+        const target_len = readU16(req, off)
+        off += 2
+        const target = new TextDecoder().decode(
+            req.subarray(off, off + target_len),
+        )
+
+        const inode_id = this.next_inode_id++
+        const entry: FsEntry = {
+            inode_id,
+            name,
+            mode: S_IFLNK | 0o777,
+            size: target.length,
+            dt_type: DT_LNK,
+            mtime_sec: Math.floor(Date.now() / 1000),
+            mtime_nsec: 0,
+            symlink_target: target,
+        }
+
+        let children = FS_ENTRIES.get(parent_id)
+        if (!children) {
+            children = []
+            FS_ENTRIES.set(parent_id, children)
+        }
+        children.push(entry)
+        INODE_MAP.set(inode_id, entry)
+
+        // SYMLINK_R: [7B hdr] [4B status] [8B inode_id] [4B mode]
+        const resp = new Uint8Array(23)
+        packU32(resp, 0, 23)
+        resp[4] = V86FS_MSG_SYMLINK_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU64(resp, 11, inode_id)
+        packU32(resp, 19, entry.mode)
+        return resp
+    }
+
+    handle_readlink(req: Uint8Array, tag: number): Uint8Array {
+        // Parse READLINK: [7B hdr] [8B inode_id]
+        const inode_id = readU64(req, 7)
+        const entry = INODE_MAP.get(inode_id)
+
+        if (!entry || !entry.symlink_target) {
+            const resp = new Uint8Array(11)
+            packU32(resp, 0, 11)
+            resp[4] = V86FS_MSG_READLINK_R
+            resp[5] = tag & 0xff
+            resp[6] = (tag >> 8) & 0xff
+            packU32(resp, 7, V86FS_STATUS_ENOENT)
+            return resp
+        }
+
+        const target_bytes = new TextEncoder().encode(entry.symlink_target)
+        const resp_len = 11 + 2 + target_bytes.length
+        const resp = new Uint8Array(resp_len)
+        packU32(resp, 0, resp_len)
+        resp[4] = V86FS_MSG_READLINK_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU16(resp, 11, target_bytes.length)
+        resp.set(target_bytes, 13)
+        return resp
+    }
+
+    handle_statfs(tag: number): Uint8Array {
+        // STATFS_R: [7B hdr] [4B status] [8B blocks] [8B bfree] [8B bavail]
+        //           [8B files] [8B ffree] [4B bsize] [4B namelen]
+        const resp = new Uint8Array(55)
+        packU32(resp, 0, 55)
+        resp[4] = V86FS_MSG_STATFS_R
+        resp[5] = tag & 0xff
+        resp[6] = (tag >> 8) & 0xff
+        packU32(resp, 7, V86FS_STATUS_OK)
+        packU64(resp, 11, 1024 * 1024) // blocks
+        packU64(resp, 19, 512 * 1024) // bfree
+        packU64(resp, 27, 512 * 1024) // bavail
+        packU64(resp, 35, 1024 * 1024) // files
+        packU64(resp, 43, 512 * 1024) // ffree
+        packU32(resp, 51, 4096) // bsize
+        // namelen not needed, simple_statfs default is fine
         return resp
     }
 

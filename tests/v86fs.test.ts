@@ -167,6 +167,94 @@ describe(
                 expect(openCount).toBeGreaterThanOrEqual(1)
                 expect(closeCount).toBeGreaterThanOrEqual(1)
 
+                // CREATE: touch creates new file
+                const touchResult = await runCommand(
+                    emulator,
+                    'touch /mnt/newfile 2>&1; echo "EXIT:$?"',
+                )
+                expect(touchResult).toContain('EXIT:0')
+
+                // WRITE: echo writes content to file
+                const writeResult = await runCommand(
+                    emulator,
+                    'echo hello > /mnt/test.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(writeResult).toContain('EXIT:0')
+
+                // Verify written content
+                const readBack = await runCommand(
+                    emulator,
+                    'cat /mnt/test.txt 2>&1',
+                )
+                expect(readBack).toContain('hello')
+
+                // MKDIR: create subdirectory
+                const mkdirResult2 = await runCommand(
+                    emulator,
+                    'mkdir /mnt/newdir 2>&1; echo "EXIT:$?"',
+                )
+                expect(mkdirResult2).toContain('EXIT:0')
+
+                // Verify new dir appears
+                const lsResult2 = await runCommand(emulator, 'ls /mnt 2>&1')
+                expect(lsResult2).toContain('newdir')
+
+                // SETATTR: chmod
+                const chmodResult = await runCommand(
+                    emulator,
+                    'chmod 755 /mnt/test.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(chmodResult).toContain('EXIT:0')
+
+                // SETATTR: truncate
+                const truncResult = await runCommand(
+                    emulator,
+                    'truncate -s 0 /mnt/test.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(truncResult).toContain('EXIT:0')
+
+                // FSYNC: sync completes
+                const syncResult = await runCommand(
+                    emulator,
+                    'sync 2>&1; echo "EXIT:$?"',
+                )
+                expect(syncResult).toContain('EXIT:0')
+
+                // UNLINK: rm removes a file
+                const rmResult = await runCommand(
+                    emulator,
+                    'rm /mnt/newfile 2>&1; echo "EXIT:$?"',
+                )
+                expect(rmResult).toContain('EXIT:0')
+                const lsAfterRm = await runCommand(emulator, 'ls /mnt 2>&1')
+                expect(lsAfterRm).not.toContain('newfile')
+
+                // RENAME: mv renames a file
+                const mvResult = await runCommand(
+                    emulator,
+                    'mv /mnt/test.txt /mnt/renamed.txt 2>&1; echo "EXIT:$?"',
+                )
+                expect(mvResult).toContain('EXIT:0')
+                const lsAfterMv = await runCommand(emulator, 'ls /mnt 2>&1')
+                expect(lsAfterMv).toContain('renamed.txt')
+                expect(lsAfterMv).not.toContain('test.txt')
+
+                // SYMLINK + READLINK
+                const lnResult = await runCommand(
+                    emulator,
+                    'ln -s target /mnt/link 2>&1; echo "EXIT:$?"',
+                )
+                expect(lnResult).toContain('EXIT:0')
+                const readlinkResult = await runCommand(
+                    emulator,
+                    'readlink /mnt/link 2>&1',
+                )
+                expect(readlinkResult).toContain('target')
+
+                // STATFS: df shows filesystem info
+                const dfResult = await runCommand(emulator, 'df /mnt 2>&1')
+                expect(dfResult).toContain('/mnt')
+
                 // Unmount
                 await runCommand(emulator, 'umount /mnt')
             } finally {
