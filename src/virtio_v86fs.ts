@@ -824,18 +824,32 @@ export class VirtioV86FS {
     }
 
     /** Push an INVALIDATE notification to the guest via notifyq.
-     *  Guest kernel will invalidate page cache for the given inode. */
+     *  Guest kernel will invalidate page cache for the given inode.
+     *  With offset=0 and size=0 (the default), invalidates all pages. */
     invalidate_inode(inode_id: number): boolean {
+        return this.invalidate_inode_range(inode_id, 0, 0)
+    }
+
+    /** Push an INVALIDATE notification with a byte range to the guest via notifyq.
+     *  Guest kernel will invalidate only the affected page range.
+     *  offset=0 and size=0 means invalidate all pages (full invalidation). */
+    invalidate_inode_range(
+        inode_id: number,
+        offset: number,
+        size: number,
+    ): boolean {
         const queue = this.virtio.queues[2] // notifyq
         if (!queue.has_request()) return false
 
         const bufchain = queue.pop_request()
-        // INVALIDATE: [7B hdr] [8B inode_id]
-        const msg = new Uint8Array(15)
-        packU32(msg, 0, 15)
+        // INVALIDATE: [7B hdr] [8B inode_id] [8B offset] [8B size]
+        const msg = new Uint8Array(31)
+        packU32(msg, 0, 31)
         msg[4] = V86FS_MSG_INVALIDATE
         packU16(msg, 5, 0)
         packU64(msg, 7, inode_id)
+        packU64(msg, 15, offset)
+        packU64(msg, 23, size)
         bufchain.set_next_blob(msg)
         queue.push_reply(bufchain)
         queue.flush_replies()
