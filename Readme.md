@@ -1,7 +1,22 @@
-This is a fork of [copy/v86][upstream]. This fork migrates the JavaScript
-frontend to TypeScript, replaces Closure Compiler with esbuild + tsgo, and
-publishes as [`@aptre/v86`](https://www.npmjs.com/package/@aptre/v86) on npm
-with ESM and TypeScript declarations. The Rust/WASM backend is unchanged.
+This is a fork of [copy/v86][upstream] with the following enhancements:
+
+- **TypeScript migration**: JavaScript frontend translated to TypeScript with
+  esbuild + tsgo build tooling. Published as
+  [`@aptre/v86`](https://www.npmjs.com/package/@aptre/v86) on npm with ESM and
+  TypeScript declarations.
+- **Growable memory**: `growMemory(bytes)` API for dynamically expanding guest
+  RAM at runtime using WebAssembly imported memory.
+- **virtio-v86fs**: Custom virtio filesystem device with a purpose-built binary
+  protocol, DMA-based data transfer, page cache integration, push invalidation,
+  and 256-tag concurrent request support. Enables mounting host directories into
+  the guest with full POSIX semantics (tested with git).
+- **virtio-mem**: Memory hotplug device for guest-initiated memory management.
+- **State save/restore fixes**: `last_result` register now correctly persisted
+  across state snapshots, fixing intermittent assertion failures after restore.
+
+The virtio-v86fs kernel module and related kernel patches live in the
+[aperturerobotics/linux](https://github.com/aperturerobotics/linux) repository
+on the `v86` branch. The Rust/WASM backend is unchanged from upstream.
 
 [upstream]: https://github.com/copy/v86
 
@@ -36,7 +51,7 @@ list of emulated hardware:
 - An IDE disk controller.
   - A built-in ISO 9660 CD-ROM generator.
 - An NE2000 (RTL8390) PCI network card.
-- Various virtio devices: Filesystem, network and balloon.
+- Various virtio devices: Filesystem (9p and v86fs), network, balloon, and memory hotplug.
 - A SoundBlaster 16 sound card.
 
 ## Demos
@@ -207,7 +222,7 @@ var emulator = new V86({
 });
 ```
 
-See [starter.js](src/browser/starter.js) for the full API.
+See [starter.ts](src/browser/starter.ts) for the full API.
 
 ## License
 
