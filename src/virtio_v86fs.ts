@@ -61,6 +61,8 @@ const V86FS_MSG_READLINK = 0x0f
 const V86FS_MSG_STATFS = 0x10
 const V86FS_MSG_INVALIDATE = 0x20
 const V86FS_MSG_INVALIDATE_DIR = 0x21
+const V86FS_MSG_MOUNT_NOTIFY = 0x22
+const V86FS_MSG_UMOUNT_NOTIFY = 0x23
 
 // Response types
 const V86FS_MSG_MOUNT_R = 0x80
@@ -102,6 +104,122 @@ const S_IFLNK = 0o120000
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
+
+/** Directory entry returned by adapter onReaddir callback. */
+export interface V86FSDirEntry {
+    inode_id: number
+    dt_type: number
+    name: string
+}
+
+/** External host adapter for VirtioV86FS operations.
+ *  When set, operations delegate to adapter callbacks instead of the
+ *  in-memory INODE_MAP. Each callback receives parsed request fields
+ *  and a typed reply function. Callbacks may reply asynchronously. */
+export interface V86FSAdapter {
+    onMount?(
+        name: string,
+        reply: (status: number, root_inode_id: number, mode: number) => void,
+    ): void
+    onLookup?(
+        parent_id: number,
+        name: string,
+        reply: (
+            status: number,
+            inode_id: number,
+            mode: number,
+            size: number,
+        ) => void,
+    ): void
+    onGetattr?(
+        inode_id: number,
+        reply: (
+            status: number,
+            mode: number,
+            size: number,
+            mtime_sec: number,
+            mtime_nsec: number,
+        ) => void,
+    ): void
+    onReaddir?(
+        dir_id: number,
+        reply: (status: number, entries: V86FSDirEntry[]) => void,
+    ): void
+    onOpen?(
+        inode_id: number,
+        flags: number,
+        reply: (status: number, handle_id: number) => void,
+    ): void
+    onClose?(handle_id: number, reply: (status: number) => void): void
+    onRead?(
+        handle_id: number,
+        offset: number,
+        size: number,
+        reply: (status: number, data: Uint8Array) => void,
+    ): void
+    onCreate?(
+        parent_id: number,
+        name: string,
+        mode: number,
+        reply: (status: number, inode_id: number, mode: number) => void,
+    ): void
+    onWrite?(
+        inode_id: number,
+        offset: number,
+        data: Uint8Array,
+        reply: (status: number, bytes_written: number) => void,
+    ): void
+    onMkdir?(
+        parent_id: number,
+        name: string,
+        mode: number,
+        reply: (status: number, inode_id: number, mode: number) => void,
+    ): void
+    onSetattr?(
+        inode_id: number,
+        valid: number,
+        mode: number,
+        size: number,
+        reply: (status: number) => void,
+    ): void
+    onFsync?(inode_id: number, reply: (status: number) => void): void
+    onUnlink?(
+        parent_id: number,
+        name: string,
+        reply: (status: number) => void,
+    ): void
+    onRename?(
+        old_parent_id: number,
+        old_name: string,
+        new_parent_id: number,
+        new_name: string,
+        reply: (status: number) => void,
+    ): void
+    onSymlink?(
+        parent_id: number,
+        name: string,
+        target: string,
+        reply: (status: number, inode_id: number, mode: number) => void,
+    ): void
+    onReadlink?(
+        inode_id: number,
+        reply: (status: number, target: string) => void,
+    ): void
+    onStatfs?(
+        reply: (
+            status: number,
+            blocks: number,
+            bfree: number,
+            bavail: number,
+            files: number,
+            ffree: number,
+            bsize: number,
+        ) => void,
+    ): void
+    /** Called after VM state is restored. The adapter should push
+     *  INVALIDATE for all cached inodes to force guest refetch. */
+    onStateRestored?(): void
+}
 
 interface FsEntry {
     inode_id: number
@@ -227,13 +345,19 @@ function readU64(buf: Uint8Array, offset: number): number {
 export class VirtioV86FS {
     bus: BusConnector
     virtio: VirtIO
+    adapter: V86FSAdapter | null
     next_handle_id: number
     next_inode_id: number
     open_handles: Map<number, number> // handle_id -> inode_id
     read_count: number
 
-    constructor(cpu: VirtioV86FSCPU, bus: BusConnector) {
+    constructor(
+        cpu: VirtioV86FSCPU,
+        bus: BusConnector,
+        adapter?: V86FSAdapter,
+    ) {
         this.bus = bus
+        this.adapter = adapter ?? null
         this.next_handle_id = 1
         this.next_inode_id = 100
         this.open_handles = new Map()
@@ -288,68 +412,469 @@ export class VirtioV86FS {
 
     handle_queue(queue_id: number): void {
         const queue = this.virtio.queues[queue_id]
+        let need_flush = false
         while (queue.has_request()) {
             const bufchain = queue.pop_request()
             const req = new Uint8Array(bufchain.length_readable)
             bufchain.get_next_blob(req)
 
-            const resp = this.handle_message(req)
-            if (resp && bufchain.length_writable > 0) {
-                bufchain.set_next_blob(resp)
-            }
-
-            queue.push_reply(bufchain)
+            let sync = true
+            this.handle_message(req, (resp) => {
+                if (resp && bufchain.length_writable > 0) {
+                    bufchain.set_next_blob(resp)
+                }
+                queue.push_reply(bufchain)
+                if (sync) {
+                    need_flush = true
+                } else {
+                    queue.flush_replies()
+                }
+            })
+            sync = false
         }
-        queue.flush_replies()
+        if (need_flush) {
+            queue.flush_replies()
+        }
     }
 
-    handle_message(req: Uint8Array): Uint8Array | null {
+    handle_message(
+        req: Uint8Array,
+        reply: (data: Uint8Array | null) => void,
+    ): void {
         if (req.length < V86FS_HDR_SIZE) {
             console.warn('v86fs: message too short:', req.length)
-            return null
+            reply(null)
+            return
         }
 
         const type = req[4]
         const tag = readU16(req, 5)
 
+        if (this.adapter) {
+            this.handle_message_adapter(req, type, tag, reply)
+            return
+        }
+
         switch (type) {
             case V86FS_MSG_MOUNT:
-                return this.handle_mount(req, tag)
+                reply(this.handle_mount(req, tag))
+                return
             case V86FS_MSG_LOOKUP:
-                return this.handle_lookup(req, tag)
+                reply(this.handle_lookup(req, tag))
+                return
             case V86FS_MSG_GETATTR:
-                return this.handle_getattr(req, tag)
+                reply(this.handle_getattr(req, tag))
+                return
             case V86FS_MSG_READDIR:
-                return this.handle_readdir(req, tag)
+                reply(this.handle_readdir(req, tag))
+                return
             case V86FS_MSG_OPEN:
-                return this.handle_open(req, tag)
+                reply(this.handle_open(req, tag))
+                return
             case V86FS_MSG_CLOSE:
-                return this.handle_close(req, tag)
+                reply(this.handle_close(req, tag))
+                return
             case V86FS_MSG_READ:
-                return this.handle_read(req, tag)
+                reply(this.handle_read(req, tag))
+                return
             case V86FS_MSG_CREATE:
-                return this.handle_create(req, tag)
+                reply(this.handle_create(req, tag))
+                return
             case V86FS_MSG_WRITE:
-                return this.handle_write(req, tag)
+                reply(this.handle_write(req, tag))
+                return
             case V86FS_MSG_MKDIR:
-                return this.handle_mkdir(req, tag)
+                reply(this.handle_mkdir(req, tag))
+                return
             case V86FS_MSG_SETATTR:
-                return this.handle_setattr(req, tag)
+                reply(this.handle_setattr(req, tag))
+                return
             case V86FS_MSG_FSYNC:
-                return this.handle_fsync(req, tag)
+                reply(this.handle_fsync(req, tag))
+                return
             case V86FS_MSG_UNLINK:
-                return this.handle_unlink(req, tag)
+                reply(this.handle_unlink(req, tag))
+                return
             case V86FS_MSG_RENAME:
-                return this.handle_rename(req, tag)
+                reply(this.handle_rename(req, tag))
+                return
             case V86FS_MSG_SYMLINK:
-                return this.handle_symlink(req, tag)
+                reply(this.handle_symlink(req, tag))
+                return
             case V86FS_MSG_READLINK:
-                return this.handle_readlink(req, tag)
+                reply(this.handle_readlink(req, tag))
+                return
             case V86FS_MSG_STATFS:
-                return this.handle_statfs(tag)
+                reply(this.handle_statfs(tag))
+                return
             default:
                 console.warn('v86fs: unknown message type:', type)
-                return null
+                reply(null)
+                return
+        }
+    }
+
+    /** Dispatch a message to the external adapter. Parses request fields
+     *  and calls the typed adapter callback with a reply function that
+     *  encodes the response into the v86fs binary protocol. */
+    private handle_message_adapter(
+        req: Uint8Array,
+        type: number,
+        tag: number,
+        reply: (data: Uint8Array | null) => void,
+    ): void {
+        const a = this.adapter!
+        switch (type) {
+            case V86FS_MSG_MOUNT: {
+                if (!a.onMount) {
+                    reply(this.handle_mount(req, tag))
+                    return
+                }
+                const name_len = readU16(req, 7)
+                const name =
+                    name_len > 0
+                        ? textDecoder.decode(req.subarray(9, 9 + name_len))
+                        : ''
+                a.onMount(name, (status, root_inode_id, mode) => {
+                    const resp = makeResp(23, V86FS_MSG_MOUNT_R, tag)
+                    packU32(resp, 7, status)
+                    packU64(resp, 11, root_inode_id)
+                    packU32(resp, 19, mode)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_LOOKUP: {
+                if (!a.onLookup) {
+                    reply(this.handle_lookup(req, tag))
+                    return
+                }
+                const parent_id = readU64(req, 7)
+                const name_len = readU16(req, 15)
+                const name = textDecoder.decode(req.subarray(17, 17 + name_len))
+                a.onLookup(parent_id, name, (status, inode_id, mode, size) => {
+                    const resp = makeResp(31, V86FS_MSG_LOOKUP_R, tag)
+                    packU32(resp, 7, status)
+                    packU64(resp, 11, inode_id)
+                    packU32(resp, 19, mode)
+                    packU64(resp, 23, size)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_GETATTR: {
+                if (!a.onGetattr) {
+                    reply(this.handle_getattr(req, tag))
+                    return
+                }
+                const inode_id = readU64(req, 7)
+                a.onGetattr(
+                    inode_id,
+                    (status, mode, size, mtime_sec, mtime_nsec) => {
+                        const resp = makeResp(35, V86FS_MSG_GETATTR_R, tag)
+                        packU32(resp, 7, status)
+                        packU32(resp, 11, mode)
+                        packU64(resp, 15, size)
+                        packU64(resp, 23, mtime_sec)
+                        packU32(resp, 31, mtime_nsec)
+                        reply(resp)
+                    },
+                )
+                return
+            }
+            case V86FS_MSG_READDIR: {
+                if (!a.onReaddir) {
+                    reply(this.handle_readdir(req, tag))
+                    return
+                }
+                const dir_id = readU64(req, 7)
+                a.onReaddir(dir_id, (status, entries) => {
+                    const encodedNames = entries.map((e) =>
+                        textEncoder.encode(e.name),
+                    )
+                    let size = 7 + 4 + 4
+                    for (const nameBytes of encodedNames) {
+                        size += 8 + 1 + 2 + nameBytes.length
+                    }
+                    const resp = makeResp(size, V86FS_MSG_READDIR_R, tag)
+                    packU32(resp, 7, status)
+                    packU32(resp, 11, entries.length)
+                    let off = 15
+                    for (let i = 0; i < entries.length; i++) {
+                        const e = entries[i]
+                        const nameBytes = encodedNames[i]
+                        packU64(resp, off, e.inode_id)
+                        resp[off + 8] = e.dt_type
+                        packU16(resp, off + 9, nameBytes.length)
+                        resp.set(nameBytes, off + 11)
+                        off += 11 + nameBytes.length
+                    }
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_OPEN: {
+                if (!a.onOpen) {
+                    reply(this.handle_open(req, tag))
+                    return
+                }
+                const inode_id = readU64(req, 7)
+                const flags = readU32(req, 15)
+                a.onOpen(inode_id, flags, (status, handle_id) => {
+                    const resp = makeResp(19, V86FS_MSG_OPEN_R, tag)
+                    packU32(resp, 7, status)
+                    packU64(resp, 11, handle_id)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_CLOSE: {
+                if (!a.onClose) {
+                    reply(this.handle_close(req, tag))
+                    return
+                }
+                const handle_id = readU64(req, 7)
+                a.onClose(handle_id, (status) => {
+                    const resp = makeResp(11, V86FS_MSG_CLOSE_R, tag)
+                    packU32(resp, 7, status)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_READ: {
+                if (!a.onRead) {
+                    reply(this.handle_read(req, tag))
+                    return
+                }
+                const handle_id = readU64(req, 7)
+                const offset = readU64(req, 15)
+                const size = readU32(req, 23)
+                a.onRead(handle_id, offset, size, (status, data) => {
+                    const resp = new Uint8Array(15 + data.length)
+                    packU32(resp, 0, 15 + data.length)
+                    resp[4] = V86FS_MSG_READ_R
+                    packU16(resp, 5, tag)
+                    packU32(resp, 7, status)
+                    packU32(resp, 11, data.length)
+                    resp.set(data, 15)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_CREATE: {
+                if (!a.onCreate) {
+                    reply(this.handle_create(req, tag))
+                    return
+                }
+                const parent_id = readU64(req, 7)
+                const name_len = readU16(req, 15)
+                const name = textDecoder.decode(req.subarray(17, 17 + name_len))
+                const mode = readU32(req, 17 + name_len)
+                a.onCreate(parent_id, name, mode, (status, inode_id, rmode) => {
+                    const resp = makeResp(23, V86FS_MSG_CREATE_R, tag)
+                    packU32(resp, 7, status)
+                    packU64(resp, 11, inode_id)
+                    packU32(resp, 19, rmode)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_WRITE: {
+                if (!a.onWrite) {
+                    reply(this.handle_write(req, tag))
+                    return
+                }
+                const inode_id = readU64(req, 7)
+                const offset = readU64(req, 15)
+                const size = readU32(req, 23)
+                const data = req.subarray(27, 27 + size)
+                a.onWrite(inode_id, offset, data, (status, bytes_written) => {
+                    const resp = makeResp(15, V86FS_MSG_WRITE_R, tag)
+                    packU32(resp, 7, status)
+                    packU32(resp, 11, bytes_written)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_MKDIR: {
+                if (!a.onMkdir) {
+                    reply(this.handle_mkdir(req, tag))
+                    return
+                }
+                const parent_id = readU64(req, 7)
+                const name_len = readU16(req, 15)
+                const name = textDecoder.decode(req.subarray(17, 17 + name_len))
+                const mode = readU32(req, 17 + name_len)
+                a.onMkdir(parent_id, name, mode, (status, inode_id, rmode) => {
+                    const resp = makeResp(23, V86FS_MSG_MKDIR_R, tag)
+                    packU32(resp, 7, status)
+                    packU64(resp, 11, inode_id)
+                    packU32(resp, 19, rmode)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_SETATTR: {
+                if (!a.onSetattr) {
+                    reply(this.handle_setattr(req, tag))
+                    return
+                }
+                const inode_id = readU64(req, 7)
+                const valid = readU32(req, 15)
+                const mode = readU32(req, 19)
+                const size = readU64(req, 23)
+                a.onSetattr(inode_id, valid, mode, size, (status) => {
+                    const resp = makeResp(11, V86FS_MSG_SETATTR_R, tag)
+                    packU32(resp, 7, status)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_FSYNC: {
+                if (!a.onFsync) {
+                    reply(this.handle_fsync(req, tag))
+                    return
+                }
+                const inode_id = readU64(req, 7)
+                a.onFsync(inode_id, (status) => {
+                    const resp = makeResp(11, V86FS_MSG_FSYNC_R, tag)
+                    packU32(resp, 7, status)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_UNLINK: {
+                if (!a.onUnlink) {
+                    reply(this.handle_unlink(req, tag))
+                    return
+                }
+                const parent_id = readU64(req, 7)
+                const name_len = readU16(req, 15)
+                const name = textDecoder.decode(req.subarray(17, 17 + name_len))
+                a.onUnlink(parent_id, name, (status) => {
+                    const resp = makeResp(11, V86FS_MSG_UNLINK_R, tag)
+                    packU32(resp, 7, status)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_RENAME: {
+                if (!a.onRename) {
+                    reply(this.handle_rename(req, tag))
+                    return
+                }
+                let off = 7
+                const old_parent_id = readU64(req, off)
+                off += 8
+                const old_name_len = readU16(req, off)
+                off += 2
+                const old_name = textDecoder.decode(
+                    req.subarray(off, off + old_name_len),
+                )
+                off += old_name_len
+                const new_parent_id = readU64(req, off)
+                off += 8
+                const new_name_len = readU16(req, off)
+                off += 2
+                const new_name = textDecoder.decode(
+                    req.subarray(off, off + new_name_len),
+                )
+                a.onRename(
+                    old_parent_id,
+                    old_name,
+                    new_parent_id,
+                    new_name,
+                    (status) => {
+                        const resp = makeResp(11, V86FS_MSG_RENAME_R, tag)
+                        packU32(resp, 7, status)
+                        reply(resp)
+                    },
+                )
+                return
+            }
+            case V86FS_MSG_SYMLINK: {
+                if (!a.onSymlink) {
+                    reply(this.handle_symlink(req, tag))
+                    return
+                }
+                let off = 7
+                const parent_id = readU64(req, off)
+                off += 8
+                const name_len = readU16(req, off)
+                off += 2
+                const name = textDecoder.decode(
+                    req.subarray(off, off + name_len),
+                )
+                off += name_len
+                const target_len = readU16(req, off)
+                off += 2
+                const target = textDecoder.decode(
+                    req.subarray(off, off + target_len),
+                )
+                a.onSymlink(
+                    parent_id,
+                    name,
+                    target,
+                    (status, inode_id, mode) => {
+                        const resp = makeResp(23, V86FS_MSG_SYMLINK_R, tag)
+                        packU32(resp, 7, status)
+                        packU64(resp, 11, inode_id)
+                        packU32(resp, 19, mode)
+                        reply(resp)
+                    },
+                )
+                return
+            }
+            case V86FS_MSG_READLINK: {
+                if (!a.onReadlink) {
+                    reply(this.handle_readlink(req, tag))
+                    return
+                }
+                const inode_id = readU64(req, 7)
+                a.onReadlink(inode_id, (status, target) => {
+                    if (status !== V86FS_STATUS_OK) {
+                        const resp = makeResp(11, V86FS_MSG_READLINK_R, tag)
+                        packU32(resp, 7, status)
+                        reply(resp)
+                        return
+                    }
+                    const target_bytes = textEncoder.encode(target)
+                    const resp = makeResp(
+                        11 + 2 + target_bytes.length,
+                        V86FS_MSG_READLINK_R,
+                        tag,
+                    )
+                    packU32(resp, 7, V86FS_STATUS_OK)
+                    packU16(resp, 11, target_bytes.length)
+                    resp.set(target_bytes, 13)
+                    reply(resp)
+                })
+                return
+            }
+            case V86FS_MSG_STATFS: {
+                if (!a.onStatfs) {
+                    reply(this.handle_statfs(tag))
+                    return
+                }
+                a.onStatfs(
+                    (status, blocks, bfree, bavail, files, ffree, bsize) => {
+                        const resp = makeResp(55, V86FS_MSG_STATFS_R, tag)
+                        packU32(resp, 7, status)
+                        packU64(resp, 11, blocks)
+                        packU64(resp, 19, bfree)
+                        packU64(resp, 27, bavail)
+                        packU64(resp, 35, files)
+                        packU64(resp, 43, ffree)
+                        packU32(resp, 51, bsize)
+                        reply(resp)
+                    },
+                )
+                return
+            }
+            default:
+                console.warn('v86fs: unknown message type:', type)
+                reply(null)
+                return
         }
     }
 
@@ -830,6 +1355,17 @@ export class VirtioV86FS {
         return this.invalidate_inode_range(inode_id, 0, 0)
     }
 
+    /** Send a message on notifyq (host -> guest push channel). */
+    private send_notify(msg: Uint8Array): boolean {
+        const queue = this.virtio.queues[2] // notifyq
+        if (!queue.has_request()) return false
+        const bufchain = queue.pop_request()
+        bufchain.set_next_blob(msg)
+        queue.push_reply(bufchain)
+        queue.flush_replies()
+        return true
+    }
+
     /** Push an INVALIDATE notification with a byte range to the guest via notifyq.
      *  Guest kernel will invalidate only the affected page range.
      *  offset=0 and size=0 means invalidate all pages (full invalidation). */
@@ -838,11 +1374,6 @@ export class VirtioV86FS {
         offset: number,
         size: number,
     ): boolean {
-        const queue = this.virtio.queues[2] // notifyq
-        if (!queue.has_request()) return false
-
-        const bufchain = queue.pop_request()
-        // INVALIDATE: [7B hdr] [8B inode_id] [8B offset] [8B size]
         const msg = new Uint8Array(31)
         packU32(msg, 0, 31)
         msg[4] = V86FS_MSG_INVALIDATE
@@ -850,28 +1381,50 @@ export class VirtioV86FS {
         packU64(msg, 7, inode_id)
         packU64(msg, 15, offset)
         packU64(msg, 23, size)
-        bufchain.set_next_blob(msg)
-        queue.push_reply(bufchain)
-        queue.flush_replies()
-        return true
+        return this.send_notify(msg)
     }
 
     /** Push an INVALIDATE_DIR notification to the guest via notifyq.
      *  Guest kernel will invalidate dcache for the given directory inode. */
     invalidate_dir(inode_id: number): boolean {
-        const queue = this.virtio.queues[2] // notifyq
-        if (!queue.has_request()) return false
-
-        const bufchain = queue.pop_request()
-        // INVALIDATE_DIR: [7B hdr] [8B inode_id]
         const msg = new Uint8Array(15)
         packU32(msg, 0, 15)
         msg[4] = V86FS_MSG_INVALIDATE_DIR
         packU16(msg, 5, 0)
         packU64(msg, 7, inode_id)
-        bufchain.set_next_blob(msg)
-        queue.push_reply(bufchain)
-        queue.flush_replies()
+        return this.send_notify(msg)
+    }
+
+    /** Send MOUNT_NOTIFY to guest: kernel mounts v86fs at path with given name. */
+    mount_notify(name: string, mount_path: string): boolean {
+        const nameBytes = textEncoder.encode(name)
+        const pathBytes = textEncoder.encode(mount_path)
+        const totalLen = 7 + 2 + nameBytes.length + 2 + pathBytes.length
+        const msg = new Uint8Array(totalLen)
+        packU32(msg, 0, totalLen)
+        msg[4] = V86FS_MSG_MOUNT_NOTIFY
+        packU16(msg, 5, 0)
+        packU16(msg, 7, nameBytes.length)
+        msg.set(nameBytes, 9)
+        packU16(msg, 9 + nameBytes.length, pathBytes.length)
+        msg.set(pathBytes, 11 + nameBytes.length)
+        if (!this.send_notify(msg)) return false
+        this.bus.send('virtio-v86fs-mount-notify', { name, path: mount_path })
+        return true
+    }
+
+    /** Send UMOUNT_NOTIFY to guest: kernel unmounts v86fs at path. */
+    umount_notify(mount_path: string): boolean {
+        const pathBytes = textEncoder.encode(mount_path)
+        const totalLen = 7 + 2 + pathBytes.length
+        const msg = new Uint8Array(totalLen)
+        packU32(msg, 0, totalLen)
+        msg[4] = V86FS_MSG_UMOUNT_NOTIFY
+        packU16(msg, 5, 0)
+        packU16(msg, 7, pathBytes.length)
+        msg.set(pathBytes, 9)
+        if (!this.send_notify(msg)) return false
+        this.bus.send('virtio-v86fs-umount-notify', { path: mount_path })
         return true
     }
 
@@ -883,5 +1436,8 @@ export class VirtioV86FS {
 
     set_state(state: any[]): void {
         this.virtio.set_state(state[0])
+        if (this.adapter?.onStateRestored) {
+            this.adapter.onStateRestored()
+        }
     }
 }

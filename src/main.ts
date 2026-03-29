@@ -1,6 +1,7 @@
 import { CPU } from './cpu.js'
 import { save_state, restore_state } from './state.js'
 export { V86 } from './browser/starter.js'
+export type { V86FSAdapter, V86FSDirEntry } from './virtio_v86fs.js'
 
 import { BusConnector } from './bus.js'
 

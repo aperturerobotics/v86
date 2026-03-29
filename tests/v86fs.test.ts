@@ -19,6 +19,8 @@ const { INODE_MAP, FS_ENTRIES } = HAS_PROTO
     ? await import('../src/virtio_v86fs.js')
     : ({ INODE_MAP: undefined, FS_ENTRIES: undefined } as any)
 
+import type { V86FSAdapter, V86FSDirEntry } from '../src/virtio_v86fs.js'
+
 // Patch fetch to support file:// URLs and local paths for Node.js
 const _origFetch = globalThis.fetch
 globalThis.fetch = async (input: any, init?: any) => {
@@ -126,6 +128,275 @@ function createBootEmulator(handle9p: any): any {
             'rw init=/usr/bin/bash root=host9p rootfstype=9p rootflags=trans=virtio,cache=loose console=ttyS0',
         filesystem: { handle9p },
         virtio_v86fs: true,
+        autostart: true,
+    })
+}
+
+// S_IF* mode bits for adapter tests
+const S_IFDIR = 0o040000
+const S_IFREG = 0o100000
+const _S_IFLNK = 0o120000
+const DT_DIR_C = 4
+const DT_REG_C = 8
+
+interface AdapterFsEntry {
+    inode_id: number
+    name: string
+    mode: number
+    size: number
+    dt_type: number
+    mtime_sec: number
+    mtime_nsec: number
+    content?: Uint8Array
+    symlink_target?: string
+}
+
+/** Create a V86FSAdapter backed by in-memory Maps. */
+function createMapAdapter(): {
+    adapter: V86FSAdapter
+    inodeMap: Map<number, AdapterFsEntry>
+    fsEntries: Map<number, AdapterFsEntry[]>
+    nextInodeId: { value: number }
+    nextHandleId: { value: number }
+    openHandles: Map<number, number>
+} {
+    const inodeMap = new Map<number, AdapterFsEntry>()
+    const fsEntries = new Map<number, AdapterFsEntry[]>()
+    const nextInodeId = { value: 100 }
+    const nextHandleId = { value: 1 }
+    const openHandles = new Map<number, number>()
+
+    // Seed root dir (inode 1) with one file
+    const rootEntry: AdapterFsEntry = {
+        inode_id: 1,
+        name: '',
+        mode: S_IFDIR | 0o755,
+        size: 0,
+        dt_type: DT_DIR_C,
+        mtime_sec: 1711500000,
+        mtime_nsec: 0,
+    }
+    inodeMap.set(1, rootEntry)
+
+    const fileEntry: AdapterFsEntry = {
+        inode_id: 2,
+        name: 'adapter-file.txt',
+        mode: S_IFREG | 0o644,
+        size: 20,
+        dt_type: DT_REG_C,
+        mtime_sec: 1711500000,
+        mtime_nsec: 0,
+        content: new TextEncoder().encode('adapter hello world\n'),
+    }
+    inodeMap.set(2, fileEntry)
+    fsEntries.set(1, [fileEntry])
+
+    const adapter: V86FSAdapter = {
+        onMount(name, reply) {
+            reply(0, 1, rootEntry.mode)
+        },
+        onLookup(parent_id, name, reply) {
+            const children = fsEntries.get(parent_id)
+            const entry = children?.find((e) => e.name === name)
+            if (!entry) {
+                reply(2, 0, 0, 0) // ENOENT
+                return
+            }
+            reply(0, entry.inode_id, entry.mode, entry.size)
+        },
+        onGetattr(inode_id, reply) {
+            const entry = inodeMap.get(inode_id)
+            if (!entry) {
+                reply(2, 0, 0, 0, 0)
+                return
+            }
+            reply(0, entry.mode, entry.size, entry.mtime_sec, entry.mtime_nsec)
+        },
+        onReaddir(dir_id, reply) {
+            const entries = fsEntries.get(dir_id) || []
+            const result: V86FSDirEntry[] = entries.map((e) => ({
+                inode_id: e.inode_id,
+                dt_type: e.dt_type,
+                name: e.name,
+            }))
+            reply(0, result)
+        },
+        onOpen(inode_id, _flags, reply) {
+            const hid = nextHandleId.value++
+            openHandles.set(hid, inode_id)
+            reply(0, hid)
+        },
+        onClose(handle_id, reply) {
+            openHandles.delete(handle_id)
+            reply(0)
+        },
+        onRead(handle_id, offset, size, reply) {
+            const iid = openHandles.get(handle_id) ?? handle_id
+            const entry = inodeMap.get(iid)
+            const content = entry?.content
+            if (!content || offset >= content.length) {
+                reply(0, new Uint8Array(0))
+                return
+            }
+            const start = Math.min(offset, content.length)
+            const end = Math.min(start + size, content.length)
+            reply(0, content.subarray(start, end))
+        },
+        onCreate(parent_id, name, mode, reply) {
+            const iid = nextInodeId.value++
+            const entry: AdapterFsEntry = {
+                inode_id: iid,
+                name,
+                mode: mode | S_IFREG,
+                size: 0,
+                dt_type: DT_REG_C,
+                mtime_sec: Math.floor(Date.now() / 1000),
+                mtime_nsec: 0,
+                content: new Uint8Array(0),
+            }
+            let children = fsEntries.get(parent_id)
+            if (!children) {
+                children = []
+                fsEntries.set(parent_id, children)
+            }
+            children.push(entry)
+            inodeMap.set(iid, entry)
+            reply(0, iid, entry.mode)
+        },
+        onWrite(inode_id, offset, data, reply) {
+            const entry = inodeMap.get(inode_id)
+            if (entry) {
+                const needed = offset + data.length
+                if (!entry.content || entry.content.length < needed) {
+                    const nc = new Uint8Array(needed)
+                    if (entry.content) nc.set(entry.content)
+                    entry.content = nc
+                }
+                entry.content.set(data, offset)
+                if (needed > entry.size) entry.size = needed
+            }
+            reply(0, data.length)
+        },
+        onMkdir(parent_id, name, mode, reply) {
+            const iid = nextInodeId.value++
+            const entry: AdapterFsEntry = {
+                inode_id: iid,
+                name,
+                mode: mode | S_IFDIR,
+                size: 0,
+                dt_type: DT_DIR_C,
+                mtime_sec: Math.floor(Date.now() / 1000),
+                mtime_nsec: 0,
+            }
+            let children = fsEntries.get(parent_id)
+            if (!children) {
+                children = []
+                fsEntries.set(parent_id, children)
+            }
+            children.push(entry)
+            inodeMap.set(iid, entry)
+            fsEntries.set(iid, [])
+            reply(0, iid, entry.mode)
+        },
+        onSetattr(inode_id, valid, mode, size, reply) {
+            const entry = inodeMap.get(inode_id)
+            if (entry) {
+                if (valid & 1)
+                    entry.mode = (entry.mode & 0o170000) | (mode & 0o7777)
+                if (valid & 8) {
+                    entry.size = size
+                    if (entry.content) {
+                        if (size === 0) entry.content = new Uint8Array(0)
+                        else if (size < entry.content.length)
+                            entry.content = entry.content.subarray(0, size)
+                    }
+                }
+            }
+            reply(0)
+        },
+        onFsync(_inode_id, reply) {
+            reply(0)
+        },
+        onUnlink(parent_id, name, reply) {
+            const children = fsEntries.get(parent_id)
+            if (children) {
+                const idx = children.findIndex((e) => e.name === name)
+                if (idx >= 0) {
+                    const e = children[idx]
+                    inodeMap.delete(e.inode_id)
+                    fsEntries.delete(e.inode_id)
+                    children.splice(idx, 1)
+                    reply(0)
+                    return
+                }
+            }
+            reply(2)
+        },
+        onRename(old_parent_id, old_name, new_parent_id, new_name, reply) {
+            const oldChildren = fsEntries.get(old_parent_id)
+            if (!oldChildren) {
+                reply(2)
+                return
+            }
+            const idx = oldChildren.findIndex((e) => e.name === old_name)
+            if (idx < 0) {
+                reply(2)
+                return
+            }
+            const entry = oldChildren[idx]
+            oldChildren.splice(idx, 1)
+            entry.name = new_name
+            let newChildren = fsEntries.get(new_parent_id)
+            if (!newChildren) {
+                newChildren = []
+                fsEntries.set(new_parent_id, newChildren)
+            }
+            newChildren.push(entry)
+            reply(0)
+        },
+        onStatfs(reply) {
+            reply(
+                0,
+                1024 * 1024,
+                512 * 1024,
+                512 * 1024,
+                1024 * 1024,
+                512 * 1024,
+                4096,
+            )
+        },
+    }
+
+    return {
+        adapter,
+        inodeMap,
+        fsEntries,
+        nextInodeId,
+        nextHandleId,
+        openHandles,
+    }
+}
+
+function createAdapterEmulator(handle9p: any, adapter: V86FSAdapter): any {
+    const bzImagePath = path.join(V86FS_DIR, 'bzImage')
+    return new V86({
+        wasm_path: path.resolve(__dirname, '../build/v86-debug.wasm'),
+        memory_size: 512 * 1024 * 1024,
+        vga_memory_size: 2 * 1024 * 1024,
+        bios: {
+            url: path.resolve(__dirname, '../bios/seabios.bin'),
+        },
+        vga_bios: {
+            url: path.resolve(__dirname, '../bios/vgabios.bin'),
+        },
+        bzimage: {
+            url: bzImagePath,
+        },
+        cmdline:
+            'rw init=/usr/bin/bash root=host9p rootfstype=9p rootflags=trans=virtio,cache=loose console=ttyS0',
+        filesystem: { handle9p },
+        virtio_v86fs: true,
+        virtio_v86fs_adapter: adapter,
         autostart: true,
     })
 }
@@ -889,10 +1160,10 @@ describe('v86fs', { timeout: 180_000 }, () => {
         try {
             await waitForSerial(emulator, ':/#', 120_000)
 
-            // Mount with -o root=workspace
+            // Mount with -o name=workspace
             const result = await runCommand(
                 emulator,
-                'mount -t v86fs none /mnt -o root=workspace 2>&1; echo "EXIT:$?"',
+                'mount -t v86fs none /mnt -o name=workspace 2>&1; echo "EXIT:$?"',
             )
             expect(result).toContain('EXIT:0')
 
@@ -1029,6 +1300,477 @@ describe('v86fs', { timeout: 180_000 }, () => {
                 if (idx >= 0) rootChildren.splice(idx, 1)
             }
             INODE_MAP.delete(300)
+            await emulator.destroy()
+        }
+    })
+
+    it('external adapter serves files from JS Map', async () => {
+        const handle9p = await loadHandle9p()
+        const { adapter } = createMapAdapter()
+        const emulator = createAdapterEmulator(handle9p, adapter)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            // Mount v86fs backed by adapter
+            const mountResult = await runCommand(
+                emulator,
+                'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+            )
+            expect(mountResult).toContain('EXIT:0')
+
+            // ls shows file from adapter's in-memory filesystem
+            const lsResult = await runCommand(emulator, 'ls /mnt 2>&1')
+            expect(lsResult).toContain('adapter-file.txt')
+
+            // cat reads content through adapter onRead callback
+            const catResult = await runCommand(
+                emulator,
+                'cat /mnt/adapter-file.txt 2>&1',
+            )
+            expect(catResult).toContain('adapter hello world')
+
+            // Create a new file through adapter onCreate + onWrite
+            const writeResult = await runCommand(
+                emulator,
+                'echo "created via adapter" > /mnt/new.txt 2>&1; echo "EXIT:$?"',
+            )
+            expect(writeResult).toContain('EXIT:0')
+
+            // Read it back through adapter
+            const catNew = await runCommand(emulator, 'cat /mnt/new.txt 2>&1')
+            expect(catNew).toContain('created via adapter')
+
+            // mkdir through adapter
+            const mkdirResult = await runCommand(
+                emulator,
+                'mkdir /mnt/adir 2>&1; echo "EXIT:$?"',
+            )
+            expect(mkdirResult).toContain('EXIT:0')
+
+            const lsResult2 = await runCommand(emulator, 'ls /mnt 2>&1')
+            expect(lsResult2).toContain('adir')
+
+            await runCommand(emulator, 'umount /mnt')
+        } finally {
+            await emulator.destroy()
+        }
+    })
+
+    it('adapter push invalidation updates cached content', async () => {
+        const handle9p = await loadHandle9p()
+        const { adapter, inodeMap } = createMapAdapter()
+        const emulator = createAdapterEmulator(handle9p, adapter)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            const mountResult = await runCommand(
+                emulator,
+                'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+            )
+            expect(mountResult).toContain('EXIT:0')
+
+            // Read adapter-file.txt to populate page cache
+            const cat1 = await runCommand(
+                emulator,
+                'cat /mnt/adapter-file.txt 2>&1',
+            )
+            expect(cat1).toContain('adapter hello world')
+
+            // Modify file content in adapter's backing map
+            const entry = inodeMap.get(2)!
+            const newContent = new TextEncoder().encode('adapter UPDATED\n')
+            entry.content = newContent
+            entry.size = newContent.length
+
+            // Push invalidation via VirtioV86FS instance
+            const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+            const sent = v86fs.invalidate_inode(2)
+            expect(sent).toBe(true)
+
+            // Wait for invalidation to propagate
+            await new Promise((r) => setTimeout(r, 300))
+
+            // Re-read: guest should refetch from adapter and see updated content
+            const cat2 = await runCommand(
+                emulator,
+                'cat /mnt/adapter-file.txt 2>&1',
+            )
+            expect(cat2).toContain('adapter UPDATED')
+            expect(cat2).not.toContain('hello world')
+
+            await runCommand(emulator, 'umount /mnt')
+        } finally {
+            await emulator.destroy()
+        }
+    })
+
+    it('onStateRestored callback invalidates all inodes after simulated restore', async () => {
+        const handle9p = await loadHandle9p()
+        const { adapter, inodeMap } = createMapAdapter()
+
+        // Wire onStateRestored to push invalidation for all inodes
+        let restoreCount = 0
+        const v86fsRef: { instance: any } = { instance: null }
+        adapter.onStateRestored = () => {
+            restoreCount++
+            if (!v86fsRef.instance) return
+            for (const iid of inodeMap.keys()) {
+                v86fsRef.instance.invalidate_inode(iid)
+            }
+        }
+
+        const emulator = createAdapterEmulator(handle9p, adapter)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+            const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+            v86fsRef.instance = v86fs
+
+            const mountResult = await runCommand(
+                emulator,
+                'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+            )
+            expect(mountResult).toContain('EXIT:0')
+
+            // Read file to populate page cache
+            const cat1 = await runCommand(
+                emulator,
+                'cat /mnt/adapter-file.txt 2>&1',
+            )
+            expect(cat1).toContain('adapter hello world')
+
+            // Modify adapter backing data
+            const entry = inodeMap.get(2)!
+            const newContent = new TextEncoder().encode('RESTORED content\n')
+            entry.content = newContent
+            entry.size = newContent.length
+
+            // Simulate state restore: call onStateRestored directly
+            // In real usage, set_state() calls this after restoring virtio state
+            expect(restoreCount).toBe(0)
+            adapter.onStateRestored!()
+            expect(restoreCount).toBe(1)
+
+            // Wait for invalidation to propagate
+            await new Promise((r) => setTimeout(r, 300))
+
+            // Read file: should see RESTORED content (cache was invalidated)
+            const cat2 = await runCommand(
+                emulator,
+                'cat /mnt/adapter-file.txt 2>&1',
+            )
+            expect(cat2).toContain('RESTORED content')
+
+            await runCommand(emulator, 'umount /mnt 2>/dev/null; true')
+        } finally {
+            await emulator.destroy()
+        }
+    })
+
+    it('v86fs root mount boots to init', async () => {
+        // Build an adapter from fs.json + flat/ that serves a complete Debian rootfs.
+        // Boot with rootfstype=v86fs (no 9p root) to verify v86fs can serve as rootfs.
+        const fsJsonPath = path.join(V86FS_DIR, 'fs.json')
+        const flatDir = path.join(V86FS_DIR, 'flat')
+        const fsJson = JSON.parse(fs.readFileSync(fsJsonPath, 'utf8'))
+        const fsRoot = fsJson.fsroot || fsJson
+
+        // Build inode table from basefs entries (same format as handle9p-server)
+        let nextIno = 1
+        const inodes = new Map<
+            number,
+            {
+                name: string
+                mode: number
+                size: number
+                mtime: number
+                sha256: string | null
+                symlink: string | null
+                children: Map<string, number> | null
+                ino: number
+            }
+        >()
+
+        function buildTree(
+            entries: any[],
+            _parentIno: number,
+        ): Map<string, number> {
+            const children = new Map<string, number>()
+            for (const entry of entries) {
+                const name = entry[0]
+                const size = entry[1] || 0
+                const mtime = entry[2] || 0
+                const mode = entry[3] || 0
+                const data = entry[6]
+                const ino = nextIno++
+                if (Array.isArray(data)) {
+                    const node = {
+                        name,
+                        mode,
+                        size: 0,
+                        mtime,
+                        sha256: null,
+                        symlink: null,
+                        children: null as Map<string, number> | null,
+                        ino,
+                    }
+                    inodes.set(ino, node)
+                    node.children = buildTree(data, ino)
+                    children.set(name, ino)
+                } else if (typeof data === 'string' && data.endsWith('.bin')) {
+                    inodes.set(ino, {
+                        name,
+                        mode,
+                        size,
+                        mtime,
+                        sha256: data,
+                        symlink: null,
+                        children: null,
+                        ino,
+                    })
+                    children.set(name, ino)
+                } else if (typeof data === 'string') {
+                    inodes.set(ino, {
+                        name,
+                        mode: mode || 0o120777,
+                        size: data.length,
+                        mtime,
+                        sha256: null,
+                        symlink: data,
+                        children: null,
+                        ino,
+                    })
+                    children.set(name, ino)
+                } else {
+                    inodes.set(ino, {
+                        name,
+                        mode,
+                        size: 0,
+                        mtime,
+                        sha256: null,
+                        symlink: null,
+                        children: null,
+                        ino,
+                    })
+                    children.set(name, ino)
+                }
+            }
+            return children
+        }
+
+        const rootChildren = buildTree(fsRoot, 0)
+        inodes.set(0, {
+            name: '/',
+            mode: S_IFDIR | 0o755,
+            size: 0,
+            mtime: 0,
+            sha256: null,
+            symlink: null,
+            children: rootChildren,
+            ino: 0,
+        })
+
+        // Content cache for flat/ files
+        const contentCache = new Map<string, Uint8Array>()
+        function fetchContent(sha256: string | null): Uint8Array {
+            if (!sha256) return new Uint8Array(0)
+            let data = contentCache.get(sha256)
+            if (data) return data
+            const filePath = path.join(flatDir, sha256)
+            data = new Uint8Array(fs.readFileSync(filePath))
+            contentCache.set(sha256, data)
+            return data
+        }
+
+        // Open file handles
+        const openHandles = new Map<number, number>()
+        let nextHandleId = 1
+
+        // Build adapter using inode table
+        const rootfsAdapter: V86FSAdapter = {
+            onMount(_name, reply) {
+                // Root mount: return root inode (0)
+                const root = inodes.get(0)!
+                reply(0, root.ino, root.mode)
+            },
+            onLookup(parent_id, name, reply) {
+                const parent = inodes.get(parent_id)
+                if (!parent?.children) {
+                    reply(2, 0, 0, 0)
+                    return
+                }
+                const childIno = parent.children.get(name)
+                if (childIno === undefined) {
+                    reply(2, 0, 0, 0)
+                    return
+                }
+                const child = inodes.get(childIno)!
+                reply(0, child.ino, child.mode, child.size)
+            },
+            onGetattr(inode_id, reply) {
+                const node = inodes.get(inode_id)
+                if (!node) {
+                    reply(2, 0, 0, 0, 0)
+                    return
+                }
+                reply(0, node.mode, node.size, node.mtime, 0)
+            },
+            onReaddir(dir_id, reply) {
+                const node = inodes.get(dir_id)
+                if (!node?.children) {
+                    reply(0, [])
+                    return
+                }
+                const entries: V86FSDirEntry[] = []
+                for (const [name, childIno] of node.children) {
+                    const child = inodes.get(childIno)!
+                    const fmt = child.mode & 0o170000
+                    let dt = DT_REG_C
+                    if (fmt === S_IFDIR) dt = DT_DIR_C
+                    else if (fmt === 0o120000) dt = 10 // DT_LNK
+                    entries.push({ inode_id: child.ino, dt_type: dt, name })
+                }
+                reply(0, entries)
+            },
+            onOpen(inode_id, _flags, reply) {
+                const hid = nextHandleId++
+                openHandles.set(hid, inode_id)
+                reply(0, hid)
+            },
+            onClose(handle_id, reply) {
+                openHandles.delete(handle_id)
+                reply(0)
+            },
+            onRead(handle_id, offset, size, reply) {
+                const iid = openHandles.get(handle_id) ?? handle_id
+                const node = inodes.get(iid)
+                if (!node) {
+                    reply(0, new Uint8Array(0))
+                    return
+                }
+                const content = fetchContent(node.sha256)
+                if (offset >= content.length) {
+                    reply(0, new Uint8Array(0))
+                    return
+                }
+                const end = Math.min(offset + size, content.length)
+                reply(0, content.subarray(offset, end))
+            },
+            onReadlink(inode_id, reply) {
+                const node = inodes.get(inode_id)
+                if (!node?.symlink) {
+                    reply(2, '')
+                    return
+                }
+                reply(0, node.symlink)
+            },
+            onStatfs(reply) {
+                reply(
+                    0,
+                    1024 * 1024,
+                    512 * 1024,
+                    512 * 1024,
+                    inodes.size,
+                    512 * 1024,
+                    4096,
+                )
+            },
+        }
+
+        const bzImagePath = path.join(V86FS_DIR, 'bzImage')
+        const emulator = new V86({
+            wasm_path: path.resolve(__dirname, '../build/v86-debug.wasm'),
+            memory_size: 512 * 1024 * 1024,
+            vga_memory_size: 2 * 1024 * 1024,
+            bios: {
+                url: path.resolve(__dirname, '../bios/seabios.bin'),
+            },
+            vga_bios: {
+                url: path.resolve(__dirname, '../bios/vgabios.bin'),
+            },
+            bzimage: {
+                url: bzImagePath,
+            },
+            cmdline:
+                'rw init=/usr/bin/bash root=v86fs rootfstype=v86fs console=ttyS0',
+            virtio_v86fs: true,
+            virtio_v86fs_adapter: rootfsAdapter,
+            autostart: true,
+        })
+
+        try {
+            // Boot to shell prompt via v86fs root mount
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            // Verify rootfs is v86fs via /proc/mounts
+            await runCommand(
+                emulator,
+                'mount -t proc proc /proc 2>/dev/null; true',
+            )
+            const mountInfo = await runCommand(
+                emulator,
+                'cat /proc/mounts 2>&1',
+            )
+            expect(mountInfo).toContain('v86fs')
+
+            // Verify we can read files from the rootfs
+            const lsResult = await runCommand(emulator, 'ls /usr/bin/bash 2>&1')
+            expect(lsResult).toContain('bash')
+
+            // Verify basic commands work
+            const echoResult = await runCommand(
+                emulator,
+                'echo "v86fs root works" 2>&1',
+            )
+            expect(echoResult).toContain('v86fs root works')
+        } finally {
+            await emulator.destroy()
+        }
+    })
+
+    it('host-controlled MOUNT_NOTIFY creates mount in guest', async () => {
+        // Boot with 9p root, then send MOUNT_NOTIFY to mount v86fs at a tmpfs path.
+        // The 9p root is read-only, so we create the mountpoint under a tmpfs first.
+        const handle9p = await loadHandle9p()
+        const { adapter } = createMapAdapter()
+        const emulator = createAdapterEmulator(handle9p, adapter)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            // Set up writable tmpfs at /tmp and create workspace mountpoint
+            await runCommand(
+                emulator,
+                'mount -t tmpfs tmpfs /tmp 2>&1; mkdir -p /tmp/ws 2>&1',
+            )
+            await runCommand(
+                emulator,
+                'mount -t proc proc /proc 2>/dev/null; true',
+            )
+
+            // Send MOUNT_NOTIFY from host: mount "workspace" at /tmp/ws
+            const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+            const sent = v86fs.mount_notify('workspace', '/tmp/ws')
+            expect(sent).toBe(true)
+
+            // Wait for kernel workqueue to process the mount
+            // call_usermodehelper runs mkdir + mount inside the VM
+            await new Promise((r) => setTimeout(r, 5000))
+
+            // Verify mount is visible
+            const mounts = await runCommand(emulator, 'cat /proc/mounts 2>&1')
+            expect(mounts).toContain('/tmp/ws')
+            expect(mounts).toContain('v86fs')
+
+            // Verify we can use the mount
+            const lsResult = await runCommand(emulator, 'ls /tmp/ws 2>&1')
+            // adapter's root has adapter-file.txt
+            expect(lsResult).toContain('adapter-file.txt')
+
+            await runCommand(emulator, 'umount /tmp/ws 2>/dev/null; true')
+        } finally {
             await emulator.destroy()
         }
     })

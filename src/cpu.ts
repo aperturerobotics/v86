@@ -1544,7 +1544,11 @@ export class CPU {
                 )
             }
             if (settings.virtio_v86fs) {
-                this.devices.virtio_v86fs = new VirtioV86FS(this, device_bus)
+                this.devices.virtio_v86fs = new VirtioV86FS(
+                    this,
+                    device_bus,
+                    settings.virtio_v86fs_adapter,
+                )
             }
 
             this.devices.sb16 = new SB16(this, device_bus)
