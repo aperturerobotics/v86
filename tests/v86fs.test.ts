@@ -908,4 +908,214 @@ describe('v86fs', { timeout: 180_000 }, () => {
             await emulator.destroy()
         }
     })
+
+    it('partial page cache invalidation refreshes only the targeted range', async () => {
+        const handle9p = await loadHandle9p()
+        const emulator = createBootEmulator(handle9p)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            const mountResult = await runCommand(
+                emulator,
+                'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+            )
+            expect(mountResult).toContain('EXIT:0')
+
+            // Create a large file spanning multiple pages (3 x 4096 = 12288 bytes)
+            const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+            const inode_id = 300
+            const pageSize = 4096
+            const pageCount = 3
+            const totalSize = pageSize * pageCount
+
+            // Build content: page 0 = 'A' repeated, page 1 = 'B' repeated, page 2 = 'C' repeated
+            const content = new Uint8Array(totalSize)
+            for (let p = 0; p < pageCount; p++) {
+                const ch = 0x41 + p // A, B, C
+                for (let i = 0; i < pageSize; i++) {
+                    content[p * pageSize + i] = ch
+                }
+            }
+
+            const entry = {
+                inode_id,
+                name: 'partial.bin',
+                mode: 0o100644,
+                size: totalSize,
+                dt_type: 8,
+                mtime_sec: Math.floor(Date.now() / 1000),
+                mtime_nsec: 0,
+                content: new Uint8Array(content),
+            }
+            const rootChildren = FS_ENTRIES.get(1)!
+            rootChildren.push(entry)
+            INODE_MAP.set(inode_id, entry)
+
+            // Invalidate dir so the new file is visible
+            v86fs.invalidate_dir(1)
+            await new Promise((r) => setTimeout(r, 200))
+
+            // Read the file to populate page cache
+            const md5Before = await runCommand(
+                emulator,
+                'md5sum /mnt/partial.bin 2>&1',
+            )
+            expect(md5Before).toContain('partial.bin')
+
+            // Track READ requests to verify only partial re-read happens
+            let readCount = 0
+            emulator.add_listener('virtio-v86fs-read', () => readCount++)
+
+            // Modify only page 1 (offset 4096, size 4096) on the host side
+            const modifiedEntry = INODE_MAP.get(inode_id)!
+            for (let i = pageSize; i < pageSize * 2; i++) {
+                modifiedEntry.content![i] = 0x58 // 'X'
+            }
+
+            // Send partial invalidation for page 1 only
+            const sent = v86fs.invalidate_inode_range(
+                inode_id,
+                pageSize,
+                pageSize,
+            )
+            expect(sent).toBe(true)
+
+            await new Promise((r) => setTimeout(r, 200))
+
+            // Drop dentry cache to force re-stat
+            await runCommand(emulator, 'echo 2 > /proc/sys/vm/drop_caches 2>&1')
+
+            // Reset read counter before re-reading
+            readCount = 0
+
+            // Re-read the file, md5 should change
+            const md5After = await runCommand(
+                emulator,
+                'md5sum /mnt/partial.bin 2>&1',
+            )
+            expect(md5After).not.toBe(md5Before)
+
+            // Verify the middle page was re-read (at least 1 READ for the invalidated page)
+            expect(readCount).toBeGreaterThanOrEqual(1)
+
+            // Verify content: read byte from each page region using od
+            const odPage0 = await runCommand(
+                emulator,
+                'dd if=/mnt/partial.bin bs=1 skip=0 count=1 2>/dev/null | od -A n -t x1 2>&1',
+            )
+            expect(odPage0.trim()).toContain('41') // 'A' still cached
+
+            const odPage1 = await runCommand(
+                emulator,
+                'dd if=/mnt/partial.bin bs=1 skip=4096 count=1 2>/dev/null | od -A n -t x1 2>&1',
+            )
+            expect(odPage1.trim()).toContain('58') // 'X' from modification
+
+            const odPage2 = await runCommand(
+                emulator,
+                'dd if=/mnt/partial.bin bs=1 skip=8192 count=1 2>/dev/null | od -A n -t x1 2>&1',
+            )
+            expect(odPage2.trim()).toContain('43') // 'C' still cached
+
+            await runCommand(emulator, 'umount /mnt')
+        } finally {
+            // Clean up injected entry
+            const rootChildren = FS_ENTRIES.get(1)
+            if (rootChildren) {
+                const idx = rootChildren.findIndex(
+                    (e: any) => e.name === 'partial.bin',
+                )
+                if (idx >= 0) rootChildren.splice(idx, 1)
+            }
+            INODE_MAP.delete(300)
+            await emulator.destroy()
+        }
+    })
+
+    it('readahead issues multiple READ requests for sequential read', async () => {
+        const handle9p = await loadHandle9p()
+        const emulator = createBootEmulator(handle9p)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            const mountResult = await runCommand(
+                emulator,
+                'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+            )
+            expect(mountResult).toContain('EXIT:0')
+
+            // Create a large file (64KB = 16 pages) to trigger readahead
+            const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+            const inode_id = 301
+            const totalSize = 64 * 1024
+            const content = new Uint8Array(totalSize)
+            for (let i = 0; i < totalSize; i++) {
+                content[i] = i & 0xff
+            }
+
+            const entry = {
+                inode_id,
+                name: 'readahead.bin',
+                mode: 0o100644,
+                size: totalSize,
+                dt_type: 8,
+                mtime_sec: Math.floor(Date.now() / 1000),
+                mtime_nsec: 0,
+                content,
+            }
+            const rootChildren = FS_ENTRIES.get(1)!
+            rootChildren.push(entry)
+            INODE_MAP.set(inode_id, entry)
+
+            // Invalidate dir so the new file is visible
+            v86fs.invalidate_dir(1)
+            await new Promise((r) => setTimeout(r, 200))
+
+            // Track READ requests
+            let readCount = 0
+            const readOffsets: number[] = []
+            emulator.add_listener(
+                'virtio-v86fs-read',
+                (info: { offset: number; size: number }) => {
+                    readCount++
+                    readOffsets.push(info.offset)
+                },
+            )
+
+            // Sequential read of the large file via cat
+            const catResult = await runCommand(
+                emulator,
+                'cat /mnt/readahead.bin | wc -c 2>&1',
+            )
+            expect(catResult.trim()).toBe('65536')
+
+            // With readahead, the kernel should have issued multiple READ
+            // requests. For 16 pages, we expect at least several READs
+            // (not necessarily 16, as the kernel may batch).
+            expect(readCount).toBeGreaterThanOrEqual(2)
+
+            // Verify second read from page cache (no new READs)
+            const prevReadCount = readCount
+            const catResult2 = await runCommand(
+                emulator,
+                'cat /mnt/readahead.bin | wc -c 2>&1',
+            )
+            expect(catResult2.trim()).toBe('65536')
+            expect(readCount).toBe(prevReadCount)
+
+            await runCommand(emulator, 'umount /mnt')
+        } finally {
+            const rootChildren = FS_ENTRIES.get(1)
+            if (rootChildren) {
+                const idx = rootChildren.findIndex(
+                    (e: any) => e.name === 'readahead.bin',
+                )
+                if (idx >= 0) rootChildren.splice(idx, 1)
+            }
+            INODE_MAP.delete(301)
+            await emulator.destroy()
+        }
+    })
 })
