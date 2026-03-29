@@ -786,6 +786,97 @@ describe('v86fs', { timeout: 180_000 }, () => {
         }
     })
 
+    it('git init, add, and commit on v86fs mount', async () => {
+        const handle9p = await loadHandle9p()
+        const emulator = createBootEmulator(handle9p)
+
+        try {
+            await waitForSerial(emulator, ':/#', 120_000)
+
+            const mountResult = await runCommand(
+                emulator,
+                'mount -t v86fs none /mnt 2>&1; echo "EXIT:$?"',
+            )
+            expect(mountResult).toContain('EXIT:0')
+
+            // Disable pager for all git commands
+            await runCommand(
+                emulator,
+                'export GIT_PAGER=cat PAGER=cat GIT_TERMINAL_PROMPT=0',
+            )
+
+            // Check git is available
+            const gitVersion = await runCommand(
+                emulator,
+                'git --version 2>&1; echo "EXIT:$?"',
+            )
+            expect(gitVersion).toContain('git version')
+            expect(gitVersion).toContain('EXIT:0')
+
+            // git init
+            const initResult = await runCommand(
+                emulator,
+                'git init /mnt 2>&1; echo "EXIT:$?"',
+                ':/#',
+                60_000,
+            )
+            expect(initResult).toContain('EXIT:0')
+
+            // Configure git identity (required for commit)
+            await runCommand(
+                emulator,
+                'git -C /mnt config user.email "test@test" 2>&1',
+            )
+            await runCommand(
+                emulator,
+                'git -C /mnt config user.name "Test" 2>&1',
+            )
+            // Suppress detached HEAD advice
+            await runCommand(
+                emulator,
+                'git -C /mnt config advice.detachedHead false 2>&1',
+            )
+
+            // Create a file and commit
+            await runCommand(
+                emulator,
+                'echo "hello v86fs" > /mnt/file.txt 2>&1',
+            )
+            const addResult = await runCommand(
+                emulator,
+                'git -C /mnt add file.txt 2>&1; echo "EXIT:$?"',
+            )
+            expect(addResult).toContain('EXIT:0')
+
+            const commitResult = await runCommand(
+                emulator,
+                'git -C /mnt commit -m "initial commit" 2>&1; echo "EXIT:$?"',
+                ':/#',
+                60_000,
+            )
+            expect(commitResult).toContain('EXIT:0')
+
+            // Verify commit exists in log
+            const logResult = await runCommand(
+                emulator,
+                'git -C /mnt log --oneline 2>&1',
+            )
+            expect(logResult).toContain('initial commit')
+
+            // Verify file.txt is committed (not in porcelain output)
+            const statusResult = await runCommand(
+                emulator,
+                'git -C /mnt status --porcelain 2>&1; echo "EXIT:$?"',
+            )
+            expect(statusResult).toContain('EXIT:0')
+            expect(statusResult).not.toContain('file.txt')
+
+            await runCommand(emulator, 'umount /mnt')
+        } finally {
+            await emulator.destroy()
+        }
+    })
+
     it('sends MOUNT message with root name to host', async () => {
         const handle9p = await loadHandle9p()
         const emulator = createBootEmulator(handle9p)

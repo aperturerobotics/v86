@@ -98,7 +98,7 @@ jobs:
         id: rootfs-cache
         with:
           path: v86fs-rootfs/
-          key: v86fs-rootfs-v2
+          key: v86fs-rootfs-v3
 
       - name: Install debootstrap
         if: steps.rootfs-cache.outputs.cache-hit != 'true'
@@ -108,7 +108,7 @@ jobs:
         if: steps.rootfs-cache.outputs.cache-hit != 'true'
         run: |
           sudo debootstrap --arch=i386 --variant=minbase \
-            --include=bash,coreutils,mount,util-linux,procps,sed,grep,gawk,diffutils \
+            --include=bash,coreutils,mount,util-linux,procps,sed,grep,gawk,diffutils,git \
             bookworm rootfs http://deb.debian.org/debian
           # Cleanup to reduce size
           sudo rm -rf rootfs/var/cache/apt/archives/* rootfs/usr/share/doc rootfs/usr/share/man
