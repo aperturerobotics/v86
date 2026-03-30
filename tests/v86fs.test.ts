@@ -11,6 +11,9 @@ const V86FS_DIR =
     process.env.V86FS_DIR ??
     path.resolve(__dirname, '../../wasivm/prototypes/debian-v86')
 const HAS_PROTO = fs.existsSync(path.join(V86FS_DIR, 'bzImage'))
+// V86FS_KERNEL: set to "1" when the bzImage includes CONFIG_V86_FS=y.
+// Tests requiring v86fs root mount are skipped without this.
+const HAS_V86FS_KERNEL = process.env.V86FS_KERNEL === '1'
 
 const { V86 } = HAS_PROTO
     ? await import('../src/main.js')
@@ -401,7 +404,7 @@ function createAdapterEmulator(handle9p: any, adapter: V86FSAdapter): any {
     })
 }
 
-describe('v86fs', { timeout: 180_000 }, () => {
+describe.skipIf(!HAS_V86FS_KERNEL)('v86fs', { timeout: 180_000 }, () => {
     it('kernel driver probes and filesystem registers', async () => {
         const handle9p = await loadHandle9p()
         const emulator = createBootEmulator(handle9p)
