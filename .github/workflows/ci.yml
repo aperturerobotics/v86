@@ -197,6 +197,7 @@ jobs:
         run: bun run test
         env:
           V86FS_DIR: build/v86fs-assets
+          V86FS_KERNEL: '1'
 
       - name: Fetch kvm-unit-test cache
         uses: actions/cache@v5
