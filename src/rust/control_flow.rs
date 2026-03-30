@@ -260,7 +260,10 @@ pub fn loopify(nodes: &Graph) -> Vec<WasmStructure> {
                 }
                 let block = WasmStructure::BasicBlock(addr);
                 // self-loops
-                if nodes.get(&group[0]).map_or(false, |s| s.contains(&group[0])) {
+                if nodes
+                    .get(&group[0])
+                    .map_or(false, |s| s.contains(&group[0]))
+                {
                     return vec![WasmStructure::Loop(vec![block])].into_iter();
                 }
                 else {
@@ -296,7 +299,8 @@ pub fn loopify(nodes: &Graph) -> Vec<WasmStructure> {
                         *elem,
                         nodes
                             .get(&elem)
-                            .unwrap()
+                            .cloned()
+                            .unwrap_or_default()
                             .iter()
                             .filter(|dest| {
                                 // XXX: This might remove forward edges to other loop entries
@@ -332,7 +336,8 @@ pub fn loopify(nodes: &Graph) -> Vec<WasmStructure> {
                                 elem,
                                 nodes
                                     .get(&elem)
-                                    .unwrap()
+                                    .cloned()
+                                    .unwrap_or_default()
                                     .iter()
                                     .copied()
                                     .filter(|dest| group.contains(dest) && *dest != entry)
