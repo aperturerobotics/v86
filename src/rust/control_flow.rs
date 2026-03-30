@@ -195,8 +195,10 @@ fn scc(edges: &Graph, rev_edges: &Graph) -> Vec<Vec<u32>> {
             return;
         }
         visited.insert(node);
-        for &next in edges.get(&node).unwrap() {
-            visit(next, edges, rev_edges, visited, l);
+        if let Some(nexts) = edges.get(&node) {
+            for &next in nexts {
+                visit(next, edges, rev_edges, visited, l);
+            }
         }
         l.push(node);
     }
