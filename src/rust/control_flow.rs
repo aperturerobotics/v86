@@ -31,6 +31,10 @@ pub fn make_graph(basic_blocks: &Vec<BasicBlock>) -> Graph {
     let mut nodes = Graph::new();
     let mut entry_edges = Set::new();
 
+    // Collect the set of known basic block addresses so we can filter out
+    // edges that point outside this compilation unit (e.g. cross-page jumps).
+    let known_addrs: Set = basic_blocks.iter().map(|b| b.addr).collect();
+
     for b in basic_blocks.iter() {
         let mut edges = Set::new();
 
@@ -41,17 +45,23 @@ pub fn make_graph(basic_blocks: &Vec<BasicBlock>) -> Graph {
                 ..
             } => {
                 if let Some(next_block_addr) = next_block_addr {
-                    edges.insert(next_block_addr);
+                    if known_addrs.contains(&next_block_addr) {
+                        edges.insert(next_block_addr);
+                    }
                 }
                 if let Some(next_block_branch_taken_addr) = next_block_branch_taken_addr {
-                    edges.insert(next_block_branch_taken_addr);
+                    if known_addrs.contains(&next_block_branch_taken_addr) {
+                        edges.insert(next_block_branch_taken_addr);
+                    }
                 }
             },
             &BasicBlockType::Normal {
                 next_block_addr: Some(next_block_addr),
                 ..
             } => {
-                edges.insert(next_block_addr);
+                if known_addrs.contains(&next_block_addr) {
+                    edges.insert(next_block_addr);
+                }
             },
             &BasicBlockType::Normal {
                 next_block_addr: None,
