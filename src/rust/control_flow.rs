@@ -115,7 +115,11 @@ impl WasmStructure {
     fn branches(&self, edges: &Graph) -> HashSet<u32> {
         fn handle(block: &WasmStructure, edges: &Graph, result: &mut HashSet<u32>) {
             match block {
-                WasmStructure::BasicBlock(addr) => result.extend(edges.get(&addr).unwrap()),
+                WasmStructure::BasicBlock(addr) => {
+                    if let Some(targets) = edges.get(&addr) {
+                        result.extend(targets);
+                    }
+                },
                 WasmStructure::Dispatcher(entries) => result.extend(entries),
                 WasmStructure::Loop(children) | WasmStructure::Block(children) => {
                     for c in children.iter() {
@@ -256,7 +260,7 @@ pub fn loopify(nodes: &Graph) -> Vec<WasmStructure> {
                 }
                 let block = WasmStructure::BasicBlock(addr);
                 // self-loops
-                if nodes.get(&group[0]).unwrap().contains(&group[0]) {
+                if nodes.get(&group[0]).map_or(false, |s| s.contains(&group[0])) {
                     return vec![WasmStructure::Loop(vec![block])].into_iter();
                 }
                 else {
