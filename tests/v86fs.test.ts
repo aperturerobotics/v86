@@ -114,7 +114,7 @@ function createBootEmulator(handle9p: any): any {
         throw new Error(`bzImage not found at ${bzImagePath}`)
     }
 
-    return new V86({
+    const emulator = new V86({
         wasm_path: path.resolve(__dirname, '../build/v86-debug.wasm'),
         memory_size: 512 * 1024 * 1024,
         vga_memory_size: 2 * 1024 * 1024,
@@ -133,6 +133,20 @@ function createBootEmulator(handle9p: any): any {
         virtio_v86fs: true,
         autostart: true,
     })
+
+    // Log serial output to stdout for CI debugging
+    let lineBuf = ''
+    emulator.add_listener('serial0-output-byte', (byte: number) => {
+        const ch = String.fromCharCode(byte)
+        if (ch === '\n') {
+            process.stdout.write('[serial] ' + lineBuf + '\n')
+            lineBuf = ''
+        } else if (ch !== '\r') {
+            lineBuf += ch
+        }
+    })
+
+    return emulator
 }
 
 // S_IF* mode bits for adapter tests
