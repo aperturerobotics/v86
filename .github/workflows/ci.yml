@@ -47,7 +47,7 @@ jobs:
 
       - name: Clone SkiffOS
         if: steps.kernel-cache.outputs.cache-hit != 'true'
-        run: git clone --depth 1 --branch v86 https://github.com/skiffos/SkiffOS.git skiffos
+        run: git clone --depth 1 https://github.com/skiffos/SkiffOS.git skiffos
 
       - name: Configure kernel tarball override
         if: steps.kernel-cache.outputs.cache-hit != 'true'
@@ -70,7 +70,7 @@ jobs:
         if: steps.kernel-cache.outputs.cache-hit != 'true'
         working-directory: skiffos
         run: |
-          export SKIFF_CONFIG=browser/v86min
+          export SKIFF_CONFIG=browser/v86,browser/v86min
           export SKIFF_WORKSPACE=v86min
           export BR2_CCACHE_DIR=${HOME}/br-cache/ccache
           export BR2_DL_DIR=${HOME}/br-cache/dl
