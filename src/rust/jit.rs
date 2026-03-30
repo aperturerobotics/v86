@@ -960,14 +960,21 @@ fn jit_analyze_and_generate(
     let basic_block_by_addr: HashMap<u32, BasicBlock> =
         basic_blocks.into_iter().map(|b| (b.addr, b)).collect();
 
-    let entries = jit_generate_module(
+    let entries = match jit_generate_module(
         structure,
         &basic_block_by_addr,
         cpu,
         &mut ctx.wasm_builder,
         wasm_table_index,
         state_flags,
-    );
+    ) {
+        Some(entries) => entries,
+        None => {
+            profiler::stat_increment(stat::COMPILE_SKIPPED_NO_NEW_ENTRY_POINTS);
+            free_wasm_table_index(ctx, wasm_table_index);
+            return;
+        },
+    };
     dbg_assert!(!entries.is_empty());
 
     let mut page_info = HashMap::new();
@@ -1156,7 +1163,7 @@ fn jit_generate_module(
     builder: &mut WasmBuilder,
     wasm_table_index: WasmTableIndex,
     state_flags: CachedStateFlags,
-) -> Vec<(u32, u16)> {
+) -> Option<Vec<(u32, u16)>> {
     builder.reset();
 
     let mut register_locals = (0..8)
@@ -1270,7 +1277,10 @@ fn jit_generate_module(
 
         match block {
             Work::WasmStructure(WasmStructure::BasicBlock(addr)) => {
-                let block = basic_blocks.get(&addr).unwrap();
+                let block = match basic_blocks.get(&addr) {
+                    Some(b) => b,
+                    None => continue,
+                };
                 jit_generate_basic_block(ctx, block);
 
                 if block.has_sti {
@@ -1423,7 +1433,7 @@ fn jit_generate_module(
                         {
                             // Blocks are consecutive
                             if next_addr.unwrap().len() > 1 {
-                                let target_index = *index_for_addr.get(&next_block_addr).unwrap();
+                                let target_index = *index_for_addr.get(&next_block_addr)?;
                                 if cfg!(feature = "profiler") {
                                     ctx.builder.const_i32(target_index.into());
                                     ctx.builder.call_fn1("debug_set_dispatcher_target");
@@ -1443,7 +1453,7 @@ fn jit_generate_module(
                             }
                         }
                         else {
-                            let &(br, target_index) = label_for_addr.get(&next_block_addr).unwrap();
+                            let &(br, target_index) = label_for_addr.get(&next_block_addr)?;
                             if let Some(target_index) = target_index {
                                 if cfg!(feature = "profiler") {
                                     ctx.builder.const_i32(target_index.into());
@@ -1493,7 +1503,7 @@ fn jit_generate_module(
                             BranchNotTaken,
                         }
 
-                        let mut handle_case = |case: Case, is_first| {
+                        let mut handle_case = |case: Case, is_first| -> Option<()> {
                             // first case generates condition and *has* to branch away,
                             // second case branches unconditionally or falls through
 
@@ -1570,8 +1580,7 @@ fn jit_generate_module(
                                     dbg_assert!(!is_first);
 
                                     if next_addr.as_ref().unwrap().len() > 1 {
-                                        let target_index =
-                                            *index_for_addr.get(&next_block_addr).unwrap();
+                                        let target_index = *index_for_addr.get(&next_block_addr)?;
                                         if cfg!(feature = "profiler") {
                                             ctx.builder.const_i32(target_index.into());
                                             ctx.builder.call_fn1("debug_set_dispatcher_target");
@@ -1592,7 +1601,7 @@ fn jit_generate_module(
                                 }
                                 else {
                                     let &(br, target_index) =
-                                        label_for_addr.get(&next_block_addr).unwrap();
+                                        label_for_addr.get(&next_block_addr)?;
                                     if let Some(target_index) = target_index {
                                         if cfg!(feature = "profiler") {
                                             // Note: Currently called unconditionally, even if the
@@ -1680,6 +1689,7 @@ fn jit_generate_module(
                                     ctx.builder.block_end();
                                 }
                             }
+                            Some(())
                         };
 
                         let branch_taken_is_fallthrough = next_block_branch_taken_addr
@@ -1749,9 +1759,9 @@ fn jit_generate_module(
                                 dbg_assert!(next_addr.unwrap().len() > 1);
 
                                 let target_index_taken =
-                                    *index_for_addr.get(&next_block_branch_taken_addr).unwrap();
+                                    *index_for_addr.get(&next_block_branch_taken_addr)?;
                                 let target_index_not_taken =
-                                    *index_for_addr.get(&next_block_addr).unwrap();
+                                    *index_for_addr.get(&next_block_addr)?;
 
                                 ctx.builder.const_i32(target_index_taken.into());
                                 ctx.builder.set_local(target_block);
@@ -1764,9 +1774,9 @@ fn jit_generate_module(
                             }
                             else if next_addr.unwrap().len() > 1 {
                                 let target_index_taken =
-                                    *index_for_addr.get(&next_block_branch_taken_addr).unwrap();
+                                    *index_for_addr.get(&next_block_branch_taken_addr)?;
                                 let target_index_not_taken =
-                                    *index_for_addr.get(&next_block_addr).unwrap();
+                                    *index_for_addr.get(&next_block_addr)?;
 
                                 codegen::gen_condition_fn(ctx, condition);
                                 ctx.builder.if_i32();
@@ -1778,12 +1788,12 @@ fn jit_generate_module(
                             }
                         }
                         else if branch_taken_is_fallthrough {
-                            handle_case(Case::BranchNotTaken, true);
-                            handle_case(Case::BranchTaken, false);
+                            handle_case(Case::BranchNotTaken, true)?;
+                            handle_case(Case::BranchTaken, false)?;
                         }
                         else {
-                            handle_case(Case::BranchTaken, true);
-                            handle_case(Case::BranchNotTaken, false);
+                            handle_case(Case::BranchTaken, true)?;
+                            handle_case(Case::BranchNotTaken, false)?;
                         }
                     },
                 }
@@ -1802,8 +1812,8 @@ fn jit_generate_module(
                     codegen::gen_profiler_stat_increment(ctx.builder, stat::DISPATCHER_LARGE);
                     let mut cases = Vec::new();
                     for &addr in &entries {
-                        let &(label, target_index) = label_for_addr.get(&addr).unwrap();
-                        let &index = index_for_addr.get(&addr).unwrap();
+                        let &(label, target_index) = label_for_addr.get(&addr)?;
+                        let &index = index_for_addr.get(&addr)?;
                         dbg_assert!(target_index.is_none() || target_index == Some(index));
                         while index as usize >= cases.len() {
                             cases.push(brtable_default);
@@ -1823,8 +1833,8 @@ fn jit_generate_module(
                         if nexts.contains(&addr) {
                             continue;
                         }
-                        let index = *index_for_addr.get(&addr).unwrap();
-                        let &(label, _) = label_for_addr.get(&addr).unwrap();
+                        let index = *index_for_addr.get(&addr)?;
+                        let &(label, _) = label_for_addr.get(&addr)?;
                         ctx.builder.get_local(target_block);
                         ctx.builder.const_i32(index.into());
                         ctx.builder.eq_i32();
@@ -1862,12 +1872,8 @@ fn jit_generate_module(
 
                 let mut olds = HashMap::new();
                 for &target in entries.iter() {
-                    let index = if entries.len() == 1 {
-                        None
-                    }
-                    else {
-                        Some(*index_for_addr.get(&target).unwrap())
-                    };
+                    let index =
+                        if entries.len() == 1 { None } else { Some(*index_for_addr.get(&target)?) };
                     let old = label_for_addr.insert(target, (label, index));
                     if let Some(old) = old {
                         olds.insert(target, old);
@@ -1906,12 +1912,8 @@ fn jit_generate_module(
                 let label = ctx.builder.block_void();
                 let mut olds = HashMap::new();
                 for &target in targets.iter() {
-                    let index = if targets.len() == 1 {
-                        None
-                    }
-                    else {
-                        Some(*index_for_addr.get(&target).unwrap())
-                    };
+                    let index =
+                        if targets.len() == 1 { None } else { Some(*index_for_addr.get(&target)?) };
                     let old = label_for_addr.insert(target, (label, index));
                     if let Some(old) = old {
                         olds.insert(target, old);
@@ -1978,9 +1980,9 @@ fn jit_generate_module(
 
     ctx.builder.finish();
 
-    let entries = Vec::from_iter(entry_blocks.iter().map(|addr| {
-        let block = basic_blocks.get(&addr).unwrap();
-        let index = *index_for_addr.get(&addr).unwrap();
+    let entries = Vec::from_iter(entry_blocks.iter().filter_map(|addr| {
+        let block = basic_blocks.get(&addr)?;
+        let index = *index_for_addr.get(&addr)?;
 
         profiler::stat_increment(stat::COMPILE_ENTRY_POINT);
 
@@ -1988,7 +1990,7 @@ fn jit_generate_module(
         // Note: We also insert blocks that weren't originally marked as entries here
         //       This doesn't have any downside, besides making the hash table slightly larger
 
-        (block.addr, index)
+        Some((block.addr, index))
     }));
 
     for b in basic_blocks.values() {
@@ -1997,7 +1999,7 @@ fn jit_generate_module(
         }
     }
 
-    return entries;
+    return Some(entries);
 }
 
 fn jit_generate_basic_block(ctx: &mut JitContext, block: &BasicBlock) {
