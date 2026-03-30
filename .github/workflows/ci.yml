@@ -36,7 +36,7 @@ jobs:
         id: kernel-cache
         with:
           path: skiffos/workspaces/v86min/images/bzImage
-          key: v86fs-kernel-${{ steps.linux-sha.outputs.sha }}
+          key: v86fs-kernel-v2-${{ steps.linux-sha.outputs.sha }}
 
       - name: Restore buildroot cache
         if: steps.kernel-cache.outputs.cache-hit != 'true'
