@@ -810,8 +810,10 @@ class IDEChannel {
                         LOG_DISK,
                     )
                 }
-                this.current_interface.features_reg =
-                    ((this.current_interface.features_reg << 8) | data) & 0xffff
+                this.master.features_reg =
+                    ((this.master.features_reg << 8) | data) & 0xffff
+                this.slave.features_reg =
+                    ((this.slave.features_reg << 8) | data) & 0xffff
             },
         )
 
@@ -827,9 +829,10 @@ class IDEChannel {
                         LOG_DISK,
                     )
                 }
-                this.current_interface.sector_count_reg =
-                    ((this.current_interface.sector_count_reg << 8) | data) &
-                    0xffff
+                this.master.sector_count_reg =
+                    ((this.master.sector_count_reg << 8) | data) & 0xffff
+                this.slave.sector_count_reg =
+                    ((this.slave.sector_count_reg << 8) | data) & 0xffff
             },
         )
 
@@ -845,8 +848,10 @@ class IDEChannel {
                         LOG_DISK,
                     )
                 }
-                this.current_interface.lba_low_reg =
-                    ((this.current_interface.lba_low_reg << 8) | data) & 0xffff
+                this.master.lba_low_reg =
+                    ((this.master.lba_low_reg << 8) | data) & 0xffff
+                this.slave.lba_low_reg =
+                    ((this.slave.lba_low_reg << 8) | data) & 0xffff
             },
         )
 
@@ -862,8 +867,10 @@ class IDEChannel {
                         LOG_DISK,
                     )
                 }
-                this.current_interface.lba_mid_reg =
-                    ((this.current_interface.lba_mid_reg << 8) | data) & 0xffff
+                this.master.lba_mid_reg =
+                    ((this.master.lba_mid_reg << 8) | data) & 0xffff
+                this.slave.lba_mid_reg =
+                    ((this.slave.lba_mid_reg << 8) | data) & 0xffff
             },
         )
 
@@ -879,8 +886,10 @@ class IDEChannel {
                         LOG_DISK,
                     )
                 }
-                this.current_interface.lba_high_reg =
-                    ((this.current_interface.lba_high_reg << 8) | data) & 0xffff
+                this.master.lba_high_reg =
+                    ((this.master.lba_high_reg << 8) | data) & 0xffff
+                this.slave.lba_high_reg =
+                    ((this.slave.lba_high_reg << 8) | data) & 0xffff
             },
         )
 

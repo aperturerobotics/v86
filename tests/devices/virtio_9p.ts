@@ -938,7 +938,7 @@ const tests = [
             emulator.serial0_send('echo lock-exclusive-1 > /mnt/fifo1\n')
 
             emulator.serial0_send(
-                "flock -sn /mnt/file -c 'cat /mnt/fifo1 >> /mnt/file' &\n",
+                "flock -s /mnt/file -c 'cat /mnt/fifo1 >> /mnt/file' &\n",
             )
             emulator.serial0_send(
                 "flock -s /mnt/file -c 'cat /mnt/fifo2 >> /mnt/file' &\n",

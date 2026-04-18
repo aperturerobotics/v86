@@ -490,10 +490,11 @@ export class VGAScreen {
 
         // Bochs VBE Extensions
         // http://wiki.osdev.org/Bochs_VBE_Extensions
-        this.dispi_index = -1
+        this.dispi_index = 0
         this.dispi_enable_value = 0
 
         io.register_write(0x1ce, this, undefined, this.port1CE_write)
+        io.register_read(0x1ce, this, undefined, this.port1CE_read)
 
         io.register_write(0x1cf, this, undefined, this.port1CF_write)
         io.register_read(0x1cf, this, undefined, this.port1CF_read)
@@ -2273,6 +2274,10 @@ export class VGAScreen {
 
     port1CE_write(value: number): void {
         this.dispi_index = value
+    }
+
+    port1CE_read(): number {
+        return this.dispi_index
     }
 
     port1CF_write(value: number): void {
