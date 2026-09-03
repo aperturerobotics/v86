@@ -1,4 +1,4 @@
-FROM docker.io/i386/alpine:3.23.3
+FROM docker.io/i386/alpine:3.24.1
 
 ENV KERNEL=virt
 ENV ADDPKGS=nodejs
