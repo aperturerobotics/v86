@@ -9,7 +9,7 @@ jobs:
     name: Lint & typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - run: bun run lint
@@ -32,7 +32,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Check kernel cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: kernel-cache
         with:
           path: skiffos/workspaces/v86min/images/bzImage
@@ -40,7 +40,7 @@ jobs:
 
       - name: Restore buildroot cache
         if: steps.kernel-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/br-cache
           key: buildroot-r1-${{ runner.os }}
@@ -89,12 +89,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: tools
 
       - name: Check rootfs cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: rootfs-cache
         with:
           path: v86fs-rootfs/
@@ -138,7 +138,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           filter: tree:0
@@ -146,7 +146,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: Setup Node.js version
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           check-latest: true
@@ -200,7 +200,7 @@ jobs:
           V86FS_KERNEL: '1'
 
       - name: Fetch kvm-unit-test cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-kvm-unit-test
         with:
           path: tests/kvm-unit-tests/
@@ -214,7 +214,7 @@ jobs:
         run: bun tests/kvm-unit-tests/run.mjs tests/kvm-unit-tests/x86/realmode.flat
 
       - name: Fetch nasmtests cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-nasmtests
         with:
           path: tests/nasm/build/
@@ -236,7 +236,7 @@ jobs:
         run: make rust-test
 
       - name: Fetch image cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: cache-images
         with:
           path: images/
