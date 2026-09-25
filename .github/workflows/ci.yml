@@ -82,6 +82,7 @@ jobs:
         with:
           name: v86fs-kernel
           path: skiffos/workspaces/v86min/images/bzImage
+          retention-days: 1
 
   rootfs:
     name: Build v86fs rootfs
@@ -130,6 +131,7 @@ jobs:
           name: v86fs-rootfs
           path: v86fs-rootfs/
           compression-level: 6
+          retention-days: 1
 
   test:
     runs-on: ubuntu-latest
