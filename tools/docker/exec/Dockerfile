@@ -1,4 +1,4 @@
-FROM alpine:3.23 as v86-builder
+FROM alpine:3.24 as v86-builder
 WORKDIR /v86
 
 RUN apk add --update curl clang make openjdk8-jre-base npm python3
