@@ -1792,6 +1792,30 @@ describe.skipIf(!HAS_V86FS_KERNEL)('v86fs', { timeout: 180_000 }, () => {
         }
     })
 
+    it('notification sent before the driver is ready is delivered at probe', async () => {
+        // The guest has not configured notifyq yet, so the device queues the
+        // notification and delivers it on the first notifyq kick.
+        const handle9p = await loadHandle9p()
+        const { adapter } = createMapAdapter()
+        const emulator = createAdapterEmulator(handle9p, adapter)
+
+        try {
+            const delivered = await new Promise<boolean>((resolve) => {
+                emulator.add_listener('emulator-loaded', () => {
+                    const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+                    resolve(v86fs.invalidate_dir(1))
+                })
+            })
+            expect(delivered).toBe(false)
+
+            await waitForSerial(emulator, ':/#', 120_000)
+            const v86fs = emulator.v86.cpu.devices.virtio_v86fs as any
+            expect(v86fs.pending_notifies).toHaveLength(0)
+        } finally {
+            await emulator.destroy()
+        }
+    })
+
     it('readahead issues multiple READ requests for sequential read', async () => {
         const handle9p = await loadHandle9p()
         const emulator = createBootEmulator(handle9p)

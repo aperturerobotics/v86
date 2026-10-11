@@ -350,6 +350,9 @@ export class VirtioV86FS {
     next_inode_id: number
     open_handles: Map<number, number> // handle_id -> inode_id
     read_count: number
+    // pending_notifies holds notifications sent before the guest posted a
+    // notifyq buffer. The next notifyq kick delivers them in order.
+    pending_notifies: Uint8Array[]
 
     constructor(
         cpu: VirtioV86FSCPU,
@@ -362,6 +365,7 @@ export class VirtioV86FS {
         this.next_inode_id = 100
         this.open_handles = new Map()
         this.read_count = 0
+        this.pending_notifies = []
 
         const queues = [
             // Queue 0: hipriq - high-priority metadata (LOOKUP, GETATTR)
@@ -401,6 +405,7 @@ export class VirtioV86FS {
                     // Queue 2: notifyq
                     (_queue_id: number) => {
                         dbg_log('v86fs: notifyq notification', LOG_PCI)
+                        this.flush_notifies()
                     },
                 ],
             },
@@ -1355,15 +1360,33 @@ export class VirtioV86FS {
         return this.invalidate_inode_range(inode_id, 0, 0)
     }
 
-    /** Send a message on notifyq (host -> guest push channel). */
+    /** Queue a message on notifyq (host -> guest push channel) and deliver
+     *  what the guest has buffers for. Returns whether every queued message
+     *  was delivered; the rest go out on the next notifyq kick. */
     private send_notify(msg: Uint8Array): boolean {
+        this.pending_notifies.push(msg)
+        return this.flush_notifies()
+    }
+
+    /** Deliver queued notifications into posted notifyq buffers. */
+    private flush_notifies(): boolean {
         const queue = this.virtio.queues[2] // notifyq
-        if (!queue.has_request()) return false
-        const bufchain = queue.pop_request()
-        bufchain.set_next_blob(msg)
-        queue.push_reply(bufchain)
-        queue.flush_replies()
-        return true
+        if (!queue.is_configured()) return this.pending_notifies.length === 0
+        let delivered = 0
+        while (
+            delivered < this.pending_notifies.length &&
+            queue.has_request()
+        ) {
+            const bufchain = queue.pop_request()
+            bufchain.set_next_blob(this.pending_notifies[delivered])
+            queue.push_reply(bufchain)
+            delivered++
+        }
+        if (delivered !== 0) {
+            this.pending_notifies.splice(0, delivered)
+            queue.flush_replies()
+        }
+        return this.pending_notifies.length === 0
     }
 
     /** Push an INVALIDATE notification with a byte range to the guest via notifyq.
@@ -1408,9 +1431,8 @@ export class VirtioV86FS {
         msg.set(nameBytes, 9)
         packU16(msg, 9 + nameBytes.length, pathBytes.length)
         msg.set(pathBytes, 11 + nameBytes.length)
-        if (!this.send_notify(msg)) return false
         this.bus.send('virtio-v86fs-mount-notify', { name, path: mount_path })
-        return true
+        return this.send_notify(msg)
     }
 
     /** Send UMOUNT_NOTIFY to guest: kernel unmounts v86fs at path. */
@@ -1423,9 +1445,8 @@ export class VirtioV86FS {
         packU16(msg, 5, 0)
         packU16(msg, 7, pathBytes.length)
         msg.set(pathBytes, 9)
-        if (!this.send_notify(msg)) return false
         this.bus.send('virtio-v86fs-umount-notify', { path: mount_path })
-        return true
+        return this.send_notify(msg)
     }
 
     get_state(): any[] {
