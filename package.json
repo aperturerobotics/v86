@@ -11,17 +11,8 @@
             "types": "./dist/v86.d.ts",
             "import": "./dist/v86.js"
         },
-        "./fs": {
-            "types": "./dist/fs.d.ts",
-            "import": "./dist/fs.js"
-        },
-        "./9p": {
-            "types": "./dist/9p.d.ts",
-            "import": "./dist/9p.js"
-        },
-        "./bus": {
-            "types": "./dist/bus.d.ts",
-            "import": "./dist/bus.js"
+        "./screen": {
+            "import": "./dist/screen.js"
         }
     },
     "files": [

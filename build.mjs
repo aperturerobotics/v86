@@ -32,6 +32,16 @@ await build({
     platform: 'neutral',
 })
 
+// Screen adapter alone, for a window that draws an emulator running in a
+// worker
+await build({
+    ...shared,
+    entryPoints: ['src/browser/screen.ts'],
+    outfile: 'dist/screen.js',
+    format: 'esm',
+    platform: 'neutral',
+})
+
 // Browser bundle (single file, all-inclusive)
 await build({
     ...shared,
