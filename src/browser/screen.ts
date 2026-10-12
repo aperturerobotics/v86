@@ -6,14 +6,14 @@ import { get_charmap } from '../lib.js'
 // Draws entire buffer and visualizes the layers that would be drawn
 export const DEBUG_SCREEN_LAYERS = DEBUG && false
 
-interface ScreenOptions {
+export interface ScreenOptions {
     container: HTMLElement
     scale?: number
     use_graphical_text?: boolean
     encoding?: string
 }
 
-interface ScreenLayer {
+export interface ScreenLayer {
     image_data: ImageData
     screen_x: number
     screen_y: number

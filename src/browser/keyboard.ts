@@ -7,6 +7,13 @@ const PLATFORM_WINDOWS =
     typeof window !== 'undefined' &&
     window.navigator.platform.toString().toLowerCase().search('win') >= 0
 
+// KeyEvent is the part of a KeyboardEvent the adapter reads, so a host can
+// relay key events from another context.
+export type KeyEvent = Pick<
+    KeyboardEvent,
+    'code' | 'key' | 'keyCode' | 'altKey' | 'shiftKey' | 'ctrlKey' | 'repeat'
+>
+
 export class KeyboardAdapter {
     emu_enabled = true
     bus: BusConnector
@@ -302,7 +309,7 @@ export class KeyboardAdapter {
 
     private keyup_handler: (e: KeyboardEvent) => void
     private keydown_handler: (e: KeyboardEvent) => void
-    private blur_handler: (e: FocusEvent) => void
+    private blur_handler: () => void
     private input_handler: (e: InputEvent) => void
 
     constructor(bus: BusConnector) {
@@ -322,19 +329,7 @@ export class KeyboardAdapter {
             return this.handler(e, true)
         }
 
-        this.blur_handler = (_e: FocusEvent) => {
-            const keys = Object.keys(this.keys_pressed)
-
-            for (let i = 0; i < keys.length; i++) {
-                const key = +keys[i]
-
-                if (this.keys_pressed[key]) {
-                    this.handle_code(key, false)
-                }
-            }
-
-            this.keys_pressed = {}
-        }
+        this.blur_handler = () => this.release_all()
 
         this.input_handler = (e: InputEvent) => {
             if (!this.bus) {
@@ -392,6 +387,28 @@ export class KeyboardAdapter {
         window.addEventListener('blur', this.blur_handler, false)
 
         window.addEventListener('input', this.input_handler as any, false)
+    }
+
+    send_event(e: KeyEvent, keydown: boolean): void {
+        if (keydown) {
+            this.keydown_handler(e as KeyboardEvent)
+        } else {
+            this.keyup_handler(e as KeyboardEvent)
+        }
+    }
+
+    release_all(): void {
+        const keys = Object.keys(this.keys_pressed)
+
+        for (let i = 0; i < keys.length; i++) {
+            const key = +keys[i]
+
+            if (this.keys_pressed[key]) {
+                this.handle_code(key, false)
+            }
+        }
+
+        this.keys_pressed = {}
     }
 
     simulate_press(code: number): void {

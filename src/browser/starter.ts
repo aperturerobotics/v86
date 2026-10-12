@@ -23,6 +23,7 @@ import { WispNetworkAdapter } from './wisp_network.js'
 import { KeyboardAdapter } from './keyboard.js'
 import { MouseAdapter } from './mouse.js'
 import { ScreenAdapter } from './screen.js'
+import type { KeyEvent } from './keyboard.js'
 import { DummyScreenAdapter } from './dummy_screen.js'
 import { ANSIScreenAdapter } from './ansi_screen.js'
 import {
@@ -419,7 +420,9 @@ export class V86 {
             )
         }
 
-        if (screen_options.container) {
+        if (screen_options.adapter) {
+            this.screen_adapter = screen_options.adapter
+        } else if (screen_options.container) {
             this.screen_adapter = new ScreenAdapter(
                 screen_options,
                 () =>
@@ -1241,6 +1244,21 @@ export class V86 {
      * codes can be found at http://stanislavs.org/helppc/make_codes.html.
      * Do nothing if there is no keyboard controller.
      */
+    /**
+     * Press or release the key described by a keyboard event. Use this to
+     * relay key events from a window to an emulator running in a worker.
+     */
+    keyboard_send_event(e: KeyEvent, keydown: boolean): void {
+        this.keyboard_adapter?.send_event(e, keydown)
+    }
+
+    /**
+     * Release every pressed key, as when the window loses focus.
+     */
+    keyboard_release_all(): void {
+        this.keyboard_adapter?.release_all()
+    }
+
     async keyboard_send_scancodes(
         codes: number[],
         delay?: number,
@@ -1277,6 +1295,23 @@ export class V86 {
     /**
      * Download a screenshot (returns an img element, only works in browsers).
      */
+    /**
+     * Send the changed part of the graphical framebuffer to the screen
+     * adapter's update_buffer. A custom adapter calls this when it can draw
+     * a frame.
+     */
+    screen_fill_buffer(): void {
+        this.v86.cpu.devices.vga?.screen_fill_buffer()
+    }
+
+    /**
+     * Mark the whole screen changed, so the screen adapter receives every
+     * text cell or framebuffer row again.
+     */
+    screen_redraw(): void {
+        this.v86.cpu.devices.vga?.complete_redraw()
+    }
+
     screen_make_screenshot(): HTMLImageElement | null {
         if (this.screen_adapter) {
             return this.screen_adapter.make_screenshot()
