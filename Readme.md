@@ -1,7 +1,7 @@
 This is a fork of [copy/v86][upstream] with the following enhancements:
 
 - **TypeScript migration**: JavaScript frontend translated to TypeScript with
-  esbuild + tsgo build tooling. Published as
+  esbuild + tsrs build tooling. Published as
   [`@aptre/v86`](https://www.npmjs.com/package/@aptre/v86) on npm with ESM and
   TypeScript declarations.
 - **Growable memory**: `growMemory(bytes)` API for dynamically expanding guest
@@ -144,7 +144,7 @@ You need:
 bun install        # install dependencies
 bun run build      # production build (ESM + browser bundle in dist/)
 bun run build:debug # debug build (with DEBUG=true)
-bun run typecheck  # type-check with tsgo
+bun run typecheck  # type-check with tsrs
 bun run lint       # lint with eslint
 bun run format     # format with prettier
 bun run test       # run tests with vitest

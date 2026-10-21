@@ -34,7 +34,7 @@
         "clean": "rimraf ./dist",
         "build": "bun build.mjs",
         "build:debug": "bun build.mjs --debug",
-        "typecheck": "tsgo --noEmit",
+        "typecheck": "tsrs --noEmit",
         "lint": "eslint ./",
         "format": "prettier --write 'src/**/*.{js,ts}' 'lib/**/*.{js,ts}' 'gen/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
         "format:check": "prettier --check 'src/**/*.{js,ts}' 'lib/**/*.{js,ts}' 'gen/**/*.{js,ts}' 'tests/**/*.{js,ts}'",
@@ -55,7 +55,7 @@
     "devDependencies": {
         "@eslint/js": "^10.0.0",
         "@types/node": "^25.5.0",
-        "@typescript/native-preview": "^7.0.0-dev.20250601",
+        "tsrs": "0.18.0-ts7.1.0-dev.20260929",
         "esbuild": "^0.27.0",
         "eslint": "^10.0.0",
         "eslint-config-prettier": "^10.1.5",
