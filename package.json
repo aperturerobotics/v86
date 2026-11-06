@@ -54,7 +54,7 @@
     },
     "devDependencies": {
         "@eslint/js": "^10.0.0",
-        "@types/node": "^25.5.0",
+        "@types/node": "^26.0.0",
         "tsrs": "0.18.0-ts7.1.0-dev.20260929",
         "esbuild": "^0.28.0",
         "eslint": "^10.0.0",
